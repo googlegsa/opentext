@@ -1,0 +1,282 @@
+<project name="plexi.opentext" default="build" basedir=".">
+  <description>OpenText Adaptor</description>
+  <tstamp/>
+  <property name="src.dir" location="src"/>
+  <property name="test.dir" location="test"/>
+  <property name="test.class" value="*Test"/>
+  <property name="build.dir" location="build"/>
+  <property name="build-src.dir" location="${build.dir}/src"/>
+  <property name="build-test.dir" location="${build.dir}/test"/>
+  <property name="build-instrument.dir" location="${build.dir}/instrument"/>
+  <property name="adaptor.clone.dir" location="lib/plexi"/>
+  <!-- Used for checking if adaptor.jar has been changed. -->
+  <property name="adaptor.jar.default"
+    value="${adaptor.clone.dir}/build/dist/adaptor/adaptor-withlib.jar"/>
+  <property name="adaptor.jar" value="${adaptor.jar.default}"/>
+  <property name="dist.dir" location="dist"/>
+  <property name="javadoc.dir" location="${build.dir}/javadoc"/>
+  <property name="lib.dir" location="lib"/>
+  <property name="junit.jar" location="${lib.dir}/junit-4.8.2.jar"/>
+  <property name="adaptor.class"
+    value="com.google.enterprise.adaptor.opentext.OpentextAdaptor"/>
+  <property name="adaptor.args" value=""/>
+  <property name="cobertura.dir" value="${basedir}/../cobertura/"/>
+  <!-- Adaptor suffix for distribution files. Useful for placing version numbers
+       on our jars. -->
+  <condition property="adaptor.suffix" value="-${adaptor.version}">
+    <isset property="adaptor.version"/>
+  </condition>
+  <!-- If adaptor.version isn't set, simply use the current date. -->
+  <property name="adaptor.suffix" value="-${DSTAMP}"/>
+
+  <path id="adaptor.build.classpath">
+<!--
+    <fileset dir="${lib.dir}">
+    </fileset>
+-->
+    <pathelement location="${adaptor.jar}"/>
+  </path>
+
+  <path id="adaptor.run.classpath">
+    <path refid="adaptor.build.classpath"/>
+  </path>
+
+  <path id="cobertura.classpath">
+    <fileset dir="${cobertura.dir}" erroronmissingdir="false">
+      <include name="cobertura.jar"/>
+      <include name="lib/**/*.jar"/>
+    </fileset>
+  </path>
+
+  <target name="-check-instrument-uptodate">
+    <uptodate property="instrument.uptodate"
+      targetfile="${build-instrument.dir}/cobertura.ser">
+      <srcfiles dir="${build-src.dir}"/>
+    </uptodate>
+  </target>
+
+  <target name="build"
+    depends="-real-build,-check-instrument-uptodate,clean-instrument"
+    description="Build source"/>
+
+  <target name="-plexi-check-submodule">
+    <condition property="plexi.is-not-submodule">
+      <not>
+        <equals arg1="${adaptor.jar.default}" arg2="${adaptor.jar}"/>
+      </not>
+    </condition>
+    <condition property="tmp.plexi.valid-setup">
+      <or>
+        <isset property="plexi.is-not-submodule"/>
+        <available file="${adaptor.clone.dir}/.git"/>
+      </or>
+    </condition>
+    <fail unless="tmp.plexi.valid-setup">Invalid setup:
+No lib/plexi submodule and using default adaptor.jar property.
+
+You need to run "git submodule init; git submodule update" to initialize the
+lib/plexi submodule or add the the command line argument
+-Dadaptor.jar=path/to/adaptor-withlib.jar to point to the adaptor library.
+    </fail>
+  </target>
+
+  <target name="-plexi-test-uptodate" depends="-plexi-check-submodule">
+    <condition property="plexi.uptodate">
+      <or>
+        <isset property="plexi.is-not-submodule"/>
+        <uptodate targetfile="${adaptor.jar}">
+          <srcfiles dir="${adaptor.clone.dir}"
+            excludes=".git/** build/** dist/** **.swp"/>
+        </uptodate>
+      </or>
+    </condition>
+  </target>
+
+  <target name="-plexi-build" depends="-plexi-test-uptodate"
+    unless="plexi.uptodate">
+    <echo message="Detected Plexi changes. Re-packaging Plexi..."/>
+    <ant antfile="${adaptor.clone.dir}/build.xml" dir="${adaptor.clone.dir}"
+      target="package" inheritAll="false">
+      <property name="adaptorlib.suffix" value=""/>
+    </ant>
+  </target>
+
+  <target name="-real-build" depends="-plexi-build">
+    <mkdir dir="${build-src.dir}"/>
+
+    <javac srcdir="${src.dir}" destdir="${build-src.dir}" debug="true"
+      includeantruntime="false" encoding="utf-8">
+      <compilerarg value="-Xlint:unchecked"/>
+      <classpath refid="adaptor.build.classpath"/>
+    </javac>
+
+    <mkdir dir="${build-test.dir}"/>
+    <!-- Compile JUnit helper -->
+    <javac srcdir="${lib.dir}" destdir="${build-test.dir}" debug="true"
+      includeantruntime="true" encoding="utf-8">
+      <compilerarg value="-Xlint:unchecked"/>
+      <classpath location="${junit.jar}"/>
+      <include name="JUnitLogFixFormatter.java"/>
+    </javac>
+
+    <!-- Compile tests, excluding example tests. -->
+    <javac srcdir="${test.dir}" destdir="${build-test.dir}" debug="true"
+      includeantruntime="false" encoding="utf-8">
+      <compilerarg value="-Xlint:unchecked"/>
+      <classpath refid="adaptor.build.classpath"/>
+      <classpath location="${build-src.dir}"/>
+      <classpath location="${junit.jar}"/>
+    </javac>
+  </target>
+
+  <target name="-discover-version" unless="adaptor.version">
+    <exec executable="git" outputproperty="adaptor.version"
+      logError="true" failifexecutionfails="false">
+      <arg value="describe"/>
+      <arg value="--always"/>
+    </exec>
+    <!-- Set version if git describe failed. -->
+    <property name="adaptor.version" value="unknown"/>
+  </target>
+
+  <target name="dist" description="Generate distribution binaries"
+    depends="clean,test,package"/>
+
+  <target name="package" description="Generate binaries"
+    depends="build,javadoc,-discover-version">
+    <property name="dist.staging.dir" value="${build.dir}/dist/staging"/>
+
+    <delete dir="${build.dir}/dist"/>
+    <delete dir="${dist.dir}"/>
+
+    <mkdir dir="${build.dir}/dist"/>
+    <mkdir dir="${build.dir}/dist/staging"/>
+    <mkdir dir="${dist.dir}"/>
+
+    <!-- Concatenate dependent JARs together into a comma-delimited list. -->
+    <pathconvert pathsep=" " refid="adaptor.run.classpath"
+      property="tmp.adaptor.classpath">
+      <mapper type="flatten"/>
+      <map from="" to="lib/"/>
+    </pathconvert>
+    <jar destfile="${dist.staging.dir}/adaptor-opentext${adaptor.suffix}.jar"
+      basedir="${build-src.dir}">
+      <manifest>
+        <attribute name="Main-Class" value="${adaptor.class}"/>
+        <attribute name="Class-Path" value="${tmp.adaptor.classpath}"/>
+        <section name="com/google/enterprise/adaptor/opentext/">
+          <attribute name="Implementation-Title"
+            value="Google OpenText Adaptor"/>
+          <attribute name="Implementation-Vendor" value="Google Inc."/>
+          <attribute name="Implementation-Version"
+            value="${adaptor.version}"/>
+        </section>
+      </manifest>
+    </jar>
+
+    <!-- lib/ -->
+    <!-- Concatenate dependent JARs together into a comma-delimited list. -->
+    <pathconvert pathsep="," refid="adaptor.run.classpath"
+      property="tmp.adaptor.fileset">
+      <!-- We remove the lib.dir from the paths to prevent trouble with comma
+           and space in lib.dir. It also makes it nicer <echo>ing
+           tmp.adaptorlib.fileset. -->
+      <map from="${lib.dir}/" to=""/>
+    </pathconvert>
+    <copy todir="${dist.staging.dir}/lib" flatten="true">
+      <fileset dir="${lib.dir}" includes="${tmp.adaptor.fileset}"/>
+    </copy>
+
+    <!-- adaptor-opentext-withlib.jar -->
+    <jar filesetmanifest="mergewithoutmain"
+      destfile="${dist.staging.dir}/adaptor-opentext${adaptor.suffix}-withlib.jar">
+      <zipfileset
+        src="${dist.staging.dir}/adaptor-opentext${adaptor.suffix}.jar"/>
+      <zipgroupfileset dir="${dist.staging.dir}/lib"/>
+      <manifest>
+        <attribute name="Main-Class" value="${adaptor.class}"/>
+      </manifest>
+    </jar>
+
+    <!-- adaptor-bin.zip -->
+    <move file="${dist.staging.dir}"
+      tofile="${build.dir}/dist/adaptor-opentext${adaptor.suffix}"/>
+    <zip destfile="${dist.dir}/adaptor-opentext${adaptor.suffix}-bin.zip"
+      basedir="${build.dir}/dist/adaptor-opentext${adaptor.suffix}"/>
+  </target>
+
+  <target name="clean" description="Remove build output">
+    <delete dir="${build.dir}"/>
+    <delete dir="${dist.dir}"/>
+  </target>
+
+  <target name="javadoc" description="Build JavaDocs">
+    <javadoc sourcepath="${src.dir}" destdir="${javadoc.dir}"
+        overview="${src.dir}/overview.html">
+      <classpath refid="adaptor.build.classpath"/>
+      <arg value="-quiet"/>
+      <arg value="-notimestamp"/>
+    </javadoc>
+  </target>
+
+  <target name="run" depends="build" description="Run adaptor">
+    <java classpath="${build-src.dir}" fork="true" classname="${adaptor.class}">
+      <classpath refid="adaptor.run.classpath"/>
+      <sysproperty key="java.util.logging.config.file"
+        value="logging.properties"/>
+      <sysproperty key="javax.net.ssl.keyStore" file="keys.jks"/>
+      <sysproperty key="javax.net.ssl.keyStoreType" value="jks"/>
+      <sysproperty key="javax.net.ssl.keyStorePassword" value="changeit"/>
+      <sysproperty key="javax.net.ssl.trustStore" file="cacerts.jks"/>
+      <sysproperty key="javax.net.ssl.trustStoreType" value="jks"/>
+      <sysproperty key="javax.net.ssl.trustStorePassword" value="changeit"/>
+      <arg line="${adaptor.args}"/>
+    </java>
+  </target>
+
+  <target name="coverage" depends="instrument,test,coverage-report"
+    description="Run instrumented tests and generate coverage report"/>
+
+  <target name="test" depends="build" description="Run JUnit tests">
+    <junit printsummary="yes" haltonfailure="yes" forkmode="once" fork="true"
+      dir="${basedir}" maxmemory="512m">
+      <sysproperty key="net.sourceforge.cobertura.datafile"
+        file="${build-instrument.dir}/cobertura.ser"/>
+      <classpath refid="adaptor.run.classpath"/>
+      <classpath refid="cobertura.classpath"/>
+      <classpath location="${junit.jar}"/>
+      <classpath location="${build-instrument.dir}"/>
+      <classpath location="${build-src.dir}"/>
+      <classpath location="${build-test.dir}"/>
+      <formatter type="plain" usefile="false"/>
+      <formatter classname="JUnitLogFixFormatter" usefile="false"/>
+      <batchtest>
+        <fileset dir="${test.dir}">
+          <include name="**/${test.class}.java"/>
+        </fileset>
+      </batchtest>
+    </junit>
+  </target>
+
+  <target name="instrument" depends="build" description="Instrument classes">
+    <taskdef classpathref="cobertura.classpath" resource="tasks.properties"/>
+    <cobertura-instrument datafile="${build-instrument.dir}/cobertura.ser"
+      todir="${build-instrument.dir}">
+      <auxClassPath>
+        <path refid="adaptor.build.classpath" />
+      </auxClassPath>
+      <fileset dir="${build-src.dir}"/>
+    </cobertura-instrument>
+  </target>
+
+  <target name="clean-instrument" unless="instrument.uptodate"
+    description="Delete instrumented classes">
+    <delete dir="${build-instrument.dir}"/>
+  </target>
+
+  <target name="coverage-report" description="Generates code coverage report">
+    <taskdef classpathref="cobertura.classpath" resource="tasks.properties"/>
+    <cobertura-report datafile="${build-instrument.dir}/cobertura.ser"
+      srcdir="${src.dir}" destdir="${build.dir}/coverage"/>
+  </target>
+</project>
