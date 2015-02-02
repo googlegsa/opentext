@@ -5,6 +5,8 @@
   <property name="test.dir" location="test"/>
   <property name="test.class" value="*Test"/>
   <property name="build.dir" location="build"/>
+  <property name="generate.dir" location="${build.dir}/generate-src"/>
+  <property name="build-generate.dir" location="${build.dir}/generate"/>
   <property name="build-src.dir" location="${build.dir}/src"/>
   <property name="build-test.dir" location="${build.dir}/test"/>
   <property name="build-instrument.dir" location="${build.dir}/instrument"/>
@@ -35,6 +37,7 @@
     </fileset>
 -->
     <pathelement location="${adaptor.jar}"/>
+    <pathelement location="${build-generate.dir}"/>
   </path>
 
   <path id="adaptor.run.classpath">
@@ -101,7 +104,46 @@ lib/plexi submodule or add the the command line argument
     </ant>
   </target>
 
-  <target name="-real-build" depends="-plexi-build">
+  <target name="-generate-test-uptodate">
+    <uptodate property="generate.uptodate"
+      targetfile="${build-generate.dir}/com/opentext/livelink/service/core/Authentication.wsdl">
+      <srcfiles dir="${basedir}" includes="*.wsdl"/>
+    </uptodate>
+  </target>
+
+  <macrodef name="wsimport">
+    <attribute name="service"/>
+    <sequential>
+      <exec executable="wsimport">
+        <arg value="-s"/>
+        <arg value="${generate.dir}"/>
+        <arg value="-d"/>
+        <arg value="${build-generate.dir}"/>
+        <arg value="-wsdllocation"/>
+        <arg value="@{service}.wsdl"/>
+        <arg value="@{service}.wsdl"/>
+      </exec>
+    </sequential>
+  </macrodef>
+
+  <target name="-generate" depends="-generate-test-uptodate"
+    unless="generate.uptodate">
+    <delete dir="${generate.dir}"/>
+    <delete dir="${build-generate.dir}"/>
+    <mkdir dir="${generate.dir}"/>
+    <mkdir dir="${build-generate.dir}"/>
+
+    <wsimport service="Authentication"/>
+    <copy todir="${build-generate.dir}/com/opentext/livelink/service/core/">
+      <fileset dir=".">
+        <include name="Authentication.wsdl"/>
+        <include name="Authentication-1.xsd"/>
+        <include name="Authentication-2.xsd"/>
+      </fileset>
+    </copy>
+  </target>
+
+  <target name="-real-build" depends="-plexi-build,-generate">
     <mkdir dir="${build-src.dir}"/>
 
     <javac srcdir="${src.dir}" destdir="${build-src.dir}" debug="true"
@@ -161,6 +203,7 @@ lib/plexi submodule or add the the command line argument
     </pathconvert>
     <jar destfile="${dist.staging.dir}/adaptor-opentext${adaptor.suffix}.jar"
       basedir="${build-src.dir}">
+      <fileset dir="${build-generate.dir}"/>
       <manifest>
         <attribute name="Main-Class" value="${adaptor.class}"/>
         <attribute name="Class-Path" value="${tmp.adaptor.classpath}"/>

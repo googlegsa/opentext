@@ -1,0 +1,8 @@
+# Sample Config file for OpenText Adaptor
+gsa.hostname = <GSA hostname>
+
+# Content Web Services config
+# webServicesUrl should be in the form http://<host>[:<port>]/les-services/services
+opentext.webServicesUrl = <Base URL for Content Web Services>
+opentext.username = <Content Server username>
+opentext.password = <Password for Content Server user>
