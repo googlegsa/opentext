@@ -14,6 +14,7 @@
 
 package com.google.enterprise.adaptor.opentext;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.enterprise.adaptor.AbstractAdaptor;
 import com.google.enterprise.adaptor.AdaptorContext;
 import com.google.enterprise.adaptor.Config;
@@ -26,14 +27,11 @@ import com.google.enterprise.adaptor.Response;
 import com.opentext.livelink.service.core.Authentication;
 import com.opentext.livelink.service.core.Authentication_Service;
 
-import java.net.URL;
-import java.net.UnknownHostException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.xml.soap.SOAPFault;
 import javax.xml.ws.BindingProvider;
-import javax.xml.ws.WebServiceException;
 import javax.xml.ws.soap.SOAPFaultException;
 
 /** For getting OpenText repository content into a Google Search Appliance. */
@@ -46,8 +44,19 @@ public class OpentextAdaptor extends AbstractAdaptor {
     AbstractAdaptor.main(new OpentextAdaptor(), args);
   }
 
+  private final SoapFactory soapFactory;
+
   /** The Authentication service object. */
   private Authentication authentication;
+
+  public OpentextAdaptor() {
+    this(new SoapFactoryImpl());
+  }
+
+  @VisibleForTesting
+  OpentextAdaptor(SoapFactory soapFactory) {
+    this.soapFactory = soapFactory;
+  }
 
   @Override
   public void initConfig(Config config) {
@@ -63,8 +72,6 @@ public class OpentextAdaptor extends AbstractAdaptor {
    * @throws InvalidConfigurationException if the hostname or
    * credentials are invalid
    * @throws SOAPFaultException if the Content Server is unavailable
-   * @throws WebServiceException if the adaptor can't connect to
-   * the web services server
    */
   @Override
   public void init(AdaptorContext context) {
@@ -77,14 +84,9 @@ public class OpentextAdaptor extends AbstractAdaptor {
     log.log(Level.CONFIG, "opentext.webServicesUrl: {0}", webServicesUrl);
     log.log(Level.CONFIG, "opentext.username: {0}", username);
 
-    Authentication_Service authService = new Authentication_Service(
-        Authentication_Service.class.getResource("Authentication.wsdl"));
-    Authentication authPort = authService.getBasicHttpBindingAuthentication();
-    ((BindingProvider) authPort).getRequestContext().put(
-        BindingProvider.ENDPOINT_ADDRESS_PROPERTY,
-        webServicesUrl + "/Authentication");
+    this.authentication = soapFactory.newAuthentication(webServicesUrl);
     try {
-      authPort.authenticateUser(username, password);
+      this.authentication.authenticateUser(username, password);
     } catch (SOAPFaultException soapFaultException) {
       SOAPFault fault = soapFaultException.getFault();
       String localPart = fault.getFaultCodeAsQName().getLocalPart();
@@ -98,7 +100,6 @@ public class OpentextAdaptor extends AbstractAdaptor {
       // that's the error.
       throw soapFaultException;
     }
-    this.authentication = authPort;
   }
 
   @Override
@@ -108,5 +109,32 @@ public class OpentextAdaptor extends AbstractAdaptor {
   /** Gives the bytes of a document referenced with id. */
   @Override
   public void getDocContent(Request req, Response resp) {
+  }
+
+  @VisibleForTesting
+  interface SoapFactory {
+    Authentication newAuthentication(String webServicesUrl);
+  }
+
+  @VisibleForTesting
+  static class SoapFactoryImpl implements SoapFactory {
+    @VisibleForTesting
+    String getWebServiceAddress(String webServicesUrl, String serviceName) {
+      if (!webServicesUrl.endsWith("/")) {
+        webServicesUrl += "/";
+      }
+      return webServicesUrl + serviceName;
+    }
+
+    @Override
+    public Authentication newAuthentication(String webServicesUrl) {
+      Authentication_Service authService = new Authentication_Service(
+          Authentication_Service.class.getResource("Authentication.wsdl"));
+      Authentication authPort = authService.getBasicHttpBindingAuthentication();
+      ((BindingProvider) authPort).getRequestContext().put(
+          BindingProvider.ENDPOINT_ADDRESS_PROPERTY,
+          getWebServiceAddress(webServicesUrl, "Authentication"));
+      return authPort;
+    }
   }
 }
