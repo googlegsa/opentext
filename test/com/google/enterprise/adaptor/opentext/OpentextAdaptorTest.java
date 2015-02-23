@@ -18,9 +18,12 @@ import static com.google.enterprise.adaptor.opentext.OpentextAdaptor.SoapFactory
 import static com.google.enterprise.adaptor.opentext.OpentextAdaptor.SoapFactoryImpl;
 import static org.junit.Assert.*;
 
+import com.google.common.collect.Lists;
 import com.google.enterprise.adaptor.AdaptorContext;
 import com.google.enterprise.adaptor.Config;
+import com.google.enterprise.adaptor.DocId;
 import com.google.enterprise.adaptor.InvalidConfigurationException;
+import com.google.enterprise.adaptor.DocIdPusher;
 
 import com.opentext.livelink.service.core.Authentication;
 
@@ -29,6 +32,7 @@ import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
 import java.lang.reflect.Proxy;
+import java.util.List;
 
 import javax.xml.namespace.QName;
 import javax.xml.soap.SOAPException;
@@ -75,9 +79,10 @@ public class OpentextAdaptorTest {
         soapFactory.authenticationMock.authenticateUserCalled);
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = context.getConfig();
-    config.addKey("opentext.username", "validuser");
-    config.addKey("opentext.password", "validpassword");
-    config.addKey("opentext.webServicesUrl",
+    adaptor.initConfig(config);
+    config.overrideKey("opentext.username", "validuser");
+    config.overrideKey("opentext.password", "validpassword");
+    config.overrideKey("opentext.webServicesUrl",
         "http://example.com/les-services/services");
     adaptor.init(context);
     assertTrue("authUser not called after init",
@@ -140,6 +145,119 @@ public class OpentextAdaptorTest {
     adaptor.init(context);
   }
 
+  @Test
+  public void testDefaultStartPoints() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = context.getConfig();
+    adaptor.initConfig(config);
+    config.overrideKey("opentext.username", "validuser");
+    config.overrideKey("opentext.password", "validpassword");
+    config.overrideKey("opentext.webServicesUrl",
+        "http://example.com/les-services/services");
+    adaptor.init(context);
+    List<StartPoint> startPoints = adaptor.getStartPoints();
+    assertEquals(1, startPoints.size());
+    assertStartPoint(startPoints.get(0), StartPoint.Type.VOLUME,
+        "EnterpriseWS", -1);
+  }
+
+  @Test
+  public void testInitNoStartPoints() {
+    thrown.expect(InvalidConfigurationException.class);
+    thrown.expectMessage("No valid source values");
+
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = context.getConfig();
+    adaptor.initConfig(config);
+    config.overrideKey("opentext.username", "validuser");
+    config.overrideKey("opentext.password", "validpassword");
+    config.overrideKey("opentext.webServicesUrl",
+        "http://example.com/les-services/services");
+    config.overrideKey("opentext.src", "");
+    adaptor.init(context);
+  }
+
+  @Test
+  public void testNodeStartPoints() {
+    List<StartPoint> startPoints = OpentextAdaptor.getStartPoints(
+        "11, 12, 13", ",");
+    assertEquals(3, startPoints.size());
+    assertStartPoint(startPoints.get(0), StartPoint.Type.NODE,
+        "11", 11);
+    assertStartPoint(startPoints.get(1), StartPoint.Type.NODE,
+        "12", 12);
+    assertStartPoint(startPoints.get(2), StartPoint.Type.NODE,
+        "13", 13);
+  }
+
+  @Test
+  public void testMixedStartPoints() {
+    List<StartPoint> startPoints = OpentextAdaptor.getStartPoints(
+        "11, 12, EnterpriseWS", ",");
+    assertEquals(3, startPoints.size());
+    assertStartPoint(startPoints.get(0), StartPoint.Type.NODE,
+        "11", 11);
+    assertStartPoint(startPoints.get(1), StartPoint.Type.NODE,
+        "12", 12);
+    assertStartPoint(startPoints.get(2), StartPoint.Type.VOLUME,
+        "EnterpriseWS", -1);
+  }
+
+  @Test
+  public void testInvalidStartPoints() {
+    List<StartPoint> startPoints = OpentextAdaptor.getStartPoints(
+        "11x, 12, EnterpriseWS, My Favorite Folder", ",");
+    assertEquals(2, startPoints.size());
+    assertStartPoint(startPoints.get(0), StartPoint.Type.NODE,
+        "12", 12);
+    assertStartPoint(startPoints.get(1), StartPoint.Type.VOLUME,
+        "EnterpriseWS", -1);
+  }
+
+  @Test
+  public void testNoValidStartPoints() {
+    List<StartPoint> startPoints = OpentextAdaptor.getStartPoints(
+        "11x, , My Favorite Folder", ",");
+    assertEquals(0, startPoints.size());
+  }
+
+  @Test
+  public void testStartPointSeparator() {
+    List<StartPoint> startPoints = OpentextAdaptor.getStartPoints(
+        "11x : 12 : EnterpriseWS : My Favorite Folder", ":");
+    assertEquals(2, startPoints.size());
+    assertStartPoint(startPoints.get(0), StartPoint.Type.NODE,
+        "12", 12);
+    assertStartPoint(startPoints.get(1), StartPoint.Type.VOLUME,
+        "EnterpriseWS", -1);
+  }
+
+  @Test
+  public void testDefaultGetDocIds() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = context.getConfig();
+    adaptor.initConfig(config);
+    config.overrideKey("opentext.username", "validuser");
+    config.overrideKey("opentext.password", "validpassword");
+    config.overrideKey("opentext.webServicesUrl",
+        "http://example.com/les-services/services");
+    adaptor.init(context);
+
+    DocIdPusherMock docIdPusherMock = new DocIdPusherMock();
+    try {
+      adaptor.getDocIds(
+          Proxies.newProxyInstance(DocIdPusher.class, docIdPusherMock));
+    } catch (InterruptedException e) { }
+    assertEquals(1, docIdPusherMock.docIds.size());
+    assertEquals("EnterpriseWS", docIdPusherMock.docIds.get(0).getUniqueId());
+  }
+
   private class SoapFactoryMock implements SoapFactory {
     private AuthenticationMock authenticationMock;
 
@@ -196,5 +314,21 @@ public class OpentextAdaptorTest {
             soapException);
       }
     }
+  }
+
+  private class DocIdPusherMock {
+    private List<DocId> docIds;
+
+    public DocId pushDocIds(Iterable<DocId> docIds) {
+      this.docIds = Lists.newArrayList(docIds);
+      return null;
+    }
+  }
+
+  void assertStartPoint(StartPoint actual, StartPoint.Type expectedType,
+      String expectedName, int expectedNodeId) {
+    assertEquals(expectedType, actual.getType());
+    assertEquals(expectedName, actual.getName());
+    assertEquals(expectedNodeId, actual.getNodeId());
   }
 }
