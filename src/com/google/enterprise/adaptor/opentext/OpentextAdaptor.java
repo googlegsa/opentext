@@ -15,6 +15,7 @@
 package com.google.enterprise.adaptor.opentext;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Splitter;
 import com.google.enterprise.adaptor.AbstractAdaptor;
 import com.google.enterprise.adaptor.AdaptorContext;
 import com.google.enterprise.adaptor.Config;
@@ -27,6 +28,8 @@ import com.google.enterprise.adaptor.Response;
 import com.opentext.livelink.service.core.Authentication;
 import com.opentext.livelink.service.core.Authentication_Service;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -49,6 +52,9 @@ public class OpentextAdaptor extends AbstractAdaptor {
   /** The Authentication service object. */
   private Authentication authentication;
 
+  /** Configured start points, with unknown values removed. */
+  private List<StartPoint> startPoints;
+
   public OpentextAdaptor() {
     this(new SoapFactoryImpl());
   }
@@ -63,14 +69,16 @@ public class OpentextAdaptor extends AbstractAdaptor {
     config.addKey("opentext.webServicesUrl", null);
     config.addKey("opentext.username", null);
     config.addKey("opentext.password", null);
+    config.addKey("opentext.src", "EnterpriseWS");
+    config.addKey("opentext.src.separator", ",");
   }
 
   /**
    * Verifies the configured Content Web Services location and
-   * credentials.
+   * credentials. Sets up the start points.
    *
    * @throws InvalidConfigurationException if the hostname or
-   * credentials are invalid
+   * credentials are invalid, or if no usable start points are provided
    * @throws SOAPFaultException if the Content Server is unavailable
    */
   @Override
@@ -100,10 +108,28 @@ public class OpentextAdaptor extends AbstractAdaptor {
       // that's the error.
       throw soapFaultException;
     }
+
+    String src = config.getValue("opentext.src");
+    String separator = config.getValue("opentext.src.separator");
+    log.log(Level.CONFIG, "opentext.src: {0}", src);
+    log.log(Level.CONFIG, "opentext.src.separator: {0}", separator);
+    this.startPoints = OpentextAdaptor.getStartPoints(src, separator);
+    if (this.startPoints.isEmpty()) {
+      // All we've done is check for either integer doc id values
+      // or the distinguished volume names, so if there aren't
+      // any of either, we're not going to get far.
+      throw new InvalidConfigurationException("No valid opentext.src values.");
+    }
   }
 
   @Override
-  public void getDocIds(DocIdPusher pusher) {
+  public void getDocIds(DocIdPusher pusher) throws InterruptedException {
+    ArrayList<DocId> docIds = new ArrayList<DocId>();
+    for (StartPoint startPoint : this.startPoints) {
+        docIds.add(new DocId(startPoint.getName()));
+    }
+    log.log(Level.FINER, "Sending doc ids: {0}", docIds);
+    pusher.pushDocIds(docIds);
   }
 
   /** Gives the bytes of a document referenced with id. */
@@ -136,5 +162,26 @@ public class OpentextAdaptor extends AbstractAdaptor {
           getWebServiceAddress(webServicesUrl, "Authentication"));
       return authPort;
     }
+  }
+
+  @VisibleForTesting
+  List<StartPoint> getStartPoints() {
+    return this.startPoints;
+  }
+
+  @VisibleForTesting
+  static List<StartPoint> getStartPoints(String src, String separator) {
+    List<StartPoint> startPoints = new ArrayList<StartPoint>();
+    Iterable<String> srcValues = Splitter.on(separator)
+        .trimResults().omitEmptyStrings().split(src);
+    for (String srcValue : srcValues) {
+      try {
+        startPoints.add(new StartPoint(srcValue));
+      } catch (IllegalArgumentException illegalArgumentException) {
+        log.log(Level.CONFIG, "opentext.src value not supported: " + srcValue,
+          illegalArgumentException);
+      }
+    }
+    return startPoints;
   }
 }

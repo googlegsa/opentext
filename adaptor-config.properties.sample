@@ -6,3 +6,7 @@ gsa.hostname = <GSA hostname>
 opentext.webServicesUrl = <Base URL for Content Web Services>
 opentext.username = <Content Server username>
 opentext.password = <Password for Content Server user>
+
+# Start points may include EnterpriseWS and object ids
+opentext.src = <List of start points for document retrieval>
+opentext.src.separator = ,
