@@ -26,6 +26,7 @@ import com.google.enterprise.adaptor.InvalidConfigurationException;
 import com.google.enterprise.adaptor.DocIdPusher;
 
 import com.opentext.livelink.service.core.Authentication;
+import com.opentext.livelink.service.docman.DocumentManagement;
 
 import org.junit.Rule;
 import org.junit.Test;
@@ -260,15 +261,23 @@ public class OpentextAdaptorTest {
 
   private class SoapFactoryMock implements SoapFactory {
     private AuthenticationMock authenticationMock;
+    private DocumentManagementMock documentManagementMock;
 
     private SoapFactoryMock() {
       this.authenticationMock = new AuthenticationMock();
+      this.documentManagementMock = new DocumentManagementMock();
     }
 
     @Override
     public Authentication newAuthentication(String webServicesUrl) {
       return Proxies.newProxyInstance(Authentication.class,
           this.authenticationMock);
+    }
+
+    @Override
+    public DocumentManagement newDocumentManagement(String webServicesUrl) {
+      return Proxies.newProxyInstance(DocumentManagement.class,
+          this.documentManagementMock);
     }
   }
 
@@ -323,6 +332,9 @@ public class OpentextAdaptorTest {
       this.docIds = Lists.newArrayList(docIds);
       return null;
     }
+  }
+
+  private class DocumentManagementMock {
   }
 
   void assertStartPoint(StartPoint actual, StartPoint.Type expectedType,

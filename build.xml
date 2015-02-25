@@ -141,6 +141,15 @@ lib/plexi submodule or add the the command line argument
         <include name="Authentication-2.xsd"/>
       </fileset>
     </copy>
+    <wsimport service="DocumentManagement"/>
+    <copy todir="${build-generate.dir}/com/opentext/livelink/service/docman/">
+      <fileset dir=".">
+        <include name="DocumentManagement.wsdl"/>
+        <include name="DocumentManagement-1.xsd"/>
+        <include name="DocumentManagement-2.xsd"/>
+        <include name="DocumentManagement-3.xsd"/>
+      </fileset>
+    </copy>
   </target>
 
   <target name="-real-build" depends="-plexi-build,-generate">

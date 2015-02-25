@@ -27,14 +27,32 @@ import com.google.enterprise.adaptor.Response;
 
 import com.opentext.livelink.service.core.Authentication;
 import com.opentext.livelink.service.core.Authentication_Service;
+import com.opentext.livelink.service.docman.DocumentManagement;
+import com.opentext.livelink.service.docman.DocumentManagement_Service;
+import com.opentext.livelink.service.docman.Node;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import javax.xml.namespace.QName;
+import javax.xml.soap.SOAPElement;
+import javax.xml.soap.SOAPEnvelope;
+import javax.xml.soap.SOAPException;
+import javax.xml.soap.SOAPHeaderElement;
 import javax.xml.soap.SOAPFault;
+import javax.xml.soap.SOAPHeader;
+import javax.xml.soap.SOAPMessage;
+import javax.xml.soap.SOAPPart;
 import javax.xml.ws.BindingProvider;
+import javax.xml.ws.handler.Handler;
+import javax.xml.ws.handler.MessageContext;
+import javax.xml.ws.handler.soap.SOAPMessageContext;
+import javax.xml.ws.handler.soap.SOAPHandler;
 import javax.xml.ws.soap.SOAPFaultException;
 
 /** For getting OpenText repository content into a Google Search Appliance. */
@@ -93,8 +111,10 @@ public class OpentextAdaptor extends AbstractAdaptor {
     log.log(Level.CONFIG, "opentext.username: {0}", username);
 
     this.authentication = soapFactory.newAuthentication(webServicesUrl);
+    String authenticationToken = null;
     try {
-      this.authentication.authenticateUser(username, password);
+      authenticationToken =
+          this.authentication.authenticateUser(username, password);
     } catch (SOAPFaultException soapFaultException) {
       SOAPFault fault = soapFaultException.getFault();
       String localPart = fault.getFaultCodeAsQName().getLocalPart();
@@ -120,6 +140,10 @@ public class OpentextAdaptor extends AbstractAdaptor {
       // any of either, we're not going to get far.
       throw new InvalidConfigurationException("No valid source values");
     }
+
+    DocumentManagement docman =
+        soapFactory.newDocumentManagement(webServicesUrl, authenticationToken);
+    Node node = docman.getRootNode("EnterpriseWS");
   }
 
   @Override
@@ -140,6 +164,8 @@ public class OpentextAdaptor extends AbstractAdaptor {
   @VisibleForTesting
   interface SoapFactory {
     Authentication newAuthentication(String webServicesUrl);
+    DocumentManagement newDocumentManagement(String webServicesUrl,
+      String authenticationToken);
   }
 
   @VisibleForTesting
@@ -152,6 +178,81 @@ public class OpentextAdaptor extends AbstractAdaptor {
       return webServicesUrl + serviceName;
     }
 
+    private class AuthenticationHandler
+        implements SOAPHandler<SOAPMessageContext> {
+
+      private final QName authHeaderName =
+          new QName("urn:api.ecm.opentext.com", "OTAuthentication");
+      private final QName authTokenName =
+          new QName("urn:api.ecm.opentext.com", "AuthenticationToken");
+      private final Set<QName> headers =
+          Collections.singleton(authHeaderName);
+
+      private String authenticationToken;
+
+      private AuthenticationHandler(String authenticationToken) {
+        this.authenticationToken = authenticationToken;
+      }
+
+      public Set<QName> getHeaders() {
+        System.out.println("Hey, we're listing headers");
+        return headers;
+      }
+
+      public void close(MessageContext context) {
+      }
+
+      public boolean handleFault(SOAPMessageContext context) {
+        System.out.println("Hey, we're handling a fault");
+        return true;
+      }
+
+      public boolean handleMessage(SOAPMessageContext context) {
+        System.out.println("Hey, we're handling a message");
+
+        // TODO: split into request/response cases.
+
+        if ((Boolean) context.get(MessageContext.MESSAGE_OUTBOUND_PROPERTY)) {
+          try {
+            SOAPMessage message = context.getMessage();
+            SOAPPart part = message.getSOAPPart();
+            SOAPEnvelope envelope = part.getEnvelope();
+            SOAPHeader header = envelope.getHeader();
+            if (header != null) {
+              // TODO: can we reuse instead?
+
+              header.detachNode();
+              header = envelope.addHeader();
+            } else {
+              header = envelope.addHeader();
+            }
+
+            SOAPHeaderElement authHeaderElement = header.addHeaderElement(
+                authHeaderName);
+            authHeaderElement.setPrefix("");
+
+            SOAPElement authTokenElement = authHeaderElement.addChildElement(
+                authTokenName);
+            authTokenElement.setPrefix("");
+            authTokenElement.addTextNode(this.authenticationToken);
+
+            message.writeTo(System.out);
+          } catch (SOAPException soapException) {
+            System.out.println("soap exception : " + soapException);
+            return false;
+          }  catch (Exception e) {
+          }
+        } else {
+          // TODO: incoming message; read authToken and store
+          try {
+            context.getMessage().writeTo(System.out);
+          } catch (Exception e) {
+          }
+        }
+        return true;
+      }
+    }
+
     @Override
     public Authentication newAuthentication(String webServicesUrl) {
       Authentication_Service authService = new Authentication_Service(
@@ -161,6 +262,26 @@ public class OpentextAdaptor extends AbstractAdaptor {
           BindingProvider.ENDPOINT_ADDRESS_PROPERTY,
           getWebServiceAddress(webServicesUrl, "Authentication"));
       return authPort;
+    }
+
+    @Override
+    public DocumentManagement newDocumentManagement(String webServicesUrl,
+      String authenticationToken) {
+      DocumentManagement_Service docmanService = new DocumentManagement_Service(
+          DocumentManagement_Service.class.getResource(
+              "DocumentManagement.wsdl"));
+      DocumentManagement docmanPort =
+          docmanService.getBasicHttpBindingDocumentManagement();
+      ((BindingProvider) docmanPort).getRequestContext().put(
+          BindingProvider.ENDPOINT_ADDRESS_PROPERTY,
+          getWebServiceAddress(webServicesUrl, "DocumentManagement"));
+
+      AuthenticationHandler handler =
+          new AuthenticationHandler(authenticationToken);
+      List<Handler> chain = Arrays.asList((Handler) handler);
+      ((BindingProvider) docmanPort).getBinding().setHandlerChain(chain);
+
+      return docmanPort;
     }
   }
 
