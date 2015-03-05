@@ -1,0 +1,15 @@
+The Google Search Appliance Connector for OpenText includes WSDL
+and schema files used to generate the client code for OpenText
+Content Web Services. These files were downloaded from a Content
+Web Services server with version 10.5.4.401.
+
+The WSDL and schema files were modified in the following ways:
+
+  * The port address location has been changed to an invalid
+    address; the correct location is set in the connector code at
+    runtime.
+
+  * References to the associated schema files have been changed
+    to be local references instead of references to a Content Web
+    Services installation.
+

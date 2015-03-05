@@ -1,4 +1,4 @@
-<?xml version='1.0' encoding='UTF-8'?><!-- Published by JAX-WS RI at http://jax-ws.dev.java.net. RI's version is JAX-WS RI 2.1.7-b01-. --><xs:schema xmlns:tns="urn:Core.service.livelink.opentext.com" xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified" targetNamespace="urn:Core.service.livelink.opentext.com">
+<?xml version='1.0' encoding='UTF-8'?><!-- Published by JAX-WS RI at http://jax-ws.dev.java.net. RI's version is JAX-WS RI 2.2.7-b01  svn-revision#${svn.Last.Changed.Rev}. --><xs:schema xmlns:tns="urn:Core.service.livelink.opentext.com" xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified" targetNamespace="urn:Core.service.livelink.opentext.com">
   <xs:element name="AuthenticateApplication">
     <xs:complexType>
       <xs:sequence>
@@ -59,6 +59,26 @@
       </xs:sequence>
     </xs:complexType>
   </xs:element>
+  <xs:element name="GetOTDSResourceID">
+    <xs:complexType/>
+  </xs:element>
+  <xs:element name="GetOTDSResourceIDResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="GetOTDSResourceIDResult" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetOTDSServer">
+    <xs:complexType/>
+  </xs:element>
+  <xs:element name="GetOTDSServerResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="GetOTDSServerResult" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
   <xs:element name="GetSessionExpirationDate">
     <xs:complexType/>
   </xs:element>
@@ -94,6 +114,16 @@
     <xs:complexType>
       <xs:sequence>
         <xs:element minOccurs="0" maxOccurs="1" name="ImpersonateUserResult" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="RefreshToken">
+    <xs:complexType/>
+  </xs:element>
+  <xs:element name="RefreshTokenResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="RefreshTokenResult" type="xs:string"/>
       </xs:sequence>
     </xs:complexType>
   </xs:element>

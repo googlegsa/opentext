@@ -24,26 +24,24 @@ class StartPoint {
   /** The config parameter string. */
   private String name;
   /** The node id on the server. */
-  private int nodeId = -1;
+  private long nodeId = -1;
 
   StartPoint(String srcElement) {
     switch (srcElement) {
-      case "EnterpriseWS": {
+      case "EnterpriseWS":
         this.type = Type.VOLUME;
         this.name = srcElement;
         break;
-      }
 
-      default: {
+      default:
         try {
-          this.nodeId = Integer.parseInt(srcElement);
           this.type = Type.NODE;
           this.name = srcElement;
+          this.nodeId = Integer.parseInt(srcElement);
           break;
         } catch (NumberFormatException numberFormatException) {
-          throw new AssertionError();
+          throw new IllegalArgumentException(srcElement, numberFormatException);
         }
-      }
     }
   }
 
@@ -55,8 +53,12 @@ class StartPoint {
     return this.name;
   }
 
-  int getNodeId() {
+  long getNodeId() {
     return this.nodeId;
+  }
+
+  void setNodeId(long nodeId) {
+    this.nodeId = nodeId;
   }
 
   @Override
