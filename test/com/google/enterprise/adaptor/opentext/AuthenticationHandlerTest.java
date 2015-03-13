@@ -47,6 +47,17 @@ public class AuthenticationHandlerTest {
         contextMock.message.getSOAPHeader());
   }
 
+  @Test
+  public void testGetNewToken() throws SOAPException {
+    SOAPMessageContextMock contextMock = new SOAPMessageContextMock(false);
+    SOAPMessageContext context =
+        Proxies.newProxyInstance(SOAPMessageContext.class, contextMock);
+    AuthenticationHandler handler = new AuthenticationHandler("authtoken");
+    assertEquals("authtoken", handler.getAuthenticationToken());
+    assertTrue(handler.handleMessage(context));
+    assertEquals("incoming token", handler.getAuthenticationToken());
+  }
+
   private static class SOAPMessageContextMock {
     private SOAPMessage message;
     private boolean isOutbound;
@@ -55,6 +66,16 @@ public class AuthenticationHandlerTest {
       MessageFactory factory = MessageFactory.newInstance();
       this.message = factory.createMessage();
       this.isOutbound = isOutbound;
+      if (!isOutbound) {
+        SOAPHeader header = this.message.getSOAPHeader();
+        SOAPHeaderElement authenticationHeaderElement =
+            header.addHeaderElement(
+                AuthenticationHandler.authenticationHeaderName);
+        SOAPElement authenticationTokenElement =
+            authenticationHeaderElement.addChildElement(
+                AuthenticationHandler.authenticationTokenName);
+        authenticationTokenElement.addTextNode("incoming token");
+      }
     }
 
     public SOAPMessage getMessage() {

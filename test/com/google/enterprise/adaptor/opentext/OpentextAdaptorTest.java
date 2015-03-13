@@ -292,7 +292,6 @@ public class OpentextAdaptorTest {
   private class SoapFactoryMock implements SoapFactory {
     private AuthenticationMock authenticationMock;
     private DocumentManagementMock documentManagementMock;
-    private String authenticationToken;
 
     private SoapFactoryMock() {
       this.authenticationMock = new AuthenticationMock();
@@ -306,18 +305,14 @@ public class OpentextAdaptorTest {
     }
 
     @Override
-    public DocumentManagement newDocumentManagement() {
+    public DocumentManagement newDocumentManagement(
+        String authenticationToken) {
       return Proxies.newProxyInstance(DocumentManagement.class,
           this.documentManagementMock);
     }
 
     @Override
     public void configure(Config config) {
-    }
-
-    @Override
-    public void setAuthenticationToken(String authenticationToken) {
-      this.authenticationToken = authenticationToken;
     }
   }
 

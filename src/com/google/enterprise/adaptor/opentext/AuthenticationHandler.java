@@ -16,7 +16,10 @@ package com.google.enterprise.adaptor.opentext;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import org.w3c.dom.Node;
+
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -50,6 +53,11 @@ class AuthenticationHandler implements SOAPHandler<SOAPMessageContext> {
 
   AuthenticationHandler(String authenticationToken) {
     this.authenticationToken = authenticationToken;
+  }
+
+  @VisibleForTesting
+  String getAuthenticationToken() {
+    return this.authenticationToken;
   }
 
   @Override
@@ -98,8 +106,29 @@ class AuthenticationHandler implements SOAPHandler<SOAPMessageContext> {
         return false;
       }
     } else {
-      // TODO: incoming message; read authenticationToken and
-      // store for next request
+      try {
+        SOAPHeader header = message.getSOAPHeader();
+        if (header != null) {
+          Iterator headerElements = header.getChildElements(
+              AuthenticationHandler.authenticationHeaderName);
+          if (headerElements.hasNext()) {
+            SOAPHeaderElement headerElement =
+                (SOAPHeaderElement) headerElements.next();
+            Iterator childElements = headerElement.getChildElements(
+                AuthenticationHandler.authenticationTokenName);
+            if (childElements.hasNext()) {
+              SOAPElement child = (SOAPElement) childElements.next();
+              Node tokenNode = child.getFirstChild();
+              if (tokenNode != null) {
+                this.authenticationToken = tokenNode.getNodeValue();;
+              }
+            }
+          }
+        }
+      } catch (SOAPException soapException) {
+        log.log(Level.WARNING, "Error reading authentication header",
+            soapException);
+      }
     }
     return true;
   }

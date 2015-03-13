@@ -53,7 +53,8 @@ public class OpentextAdaptor extends AbstractAdaptor {
   }
 
   private final SoapFactory soapFactory;
-
+  private String username;
+  private String password;
   /** Configured start points, with unknown values removed. */
   private List<StartPoint> startPoints;
 
@@ -94,11 +95,13 @@ public class OpentextAdaptor extends AbstractAdaptor {
         config.getValue("opentext.password"));
     log.log(Level.CONFIG, "opentext.webServicesUrl: {0}", webServicesUrl);
     log.log(Level.CONFIG, "opentext.username: {0}", username);
+    this.username = username;
+    this.password = password;
+
 
     Authentication authentication = soapFactory.newAuthentication();
     try {
-      soapFactory.setAuthenticationToken(
-          authentication.authenticateUser(username, password));
+      authentication.authenticateUser(username, password);
     } catch (SOAPFaultException soapFaultException) {
       SOAPFault fault = soapFaultException.getFault();
       String localPart = fault.getFaultCodeAsQName().getLocalPart();
@@ -128,8 +131,11 @@ public class OpentextAdaptor extends AbstractAdaptor {
 
   @Override
   public void getDocIds(DocIdPusher pusher) throws InterruptedException {
+    Authentication authentication = this.soapFactory.newAuthentication();
+    String authenticationToken =
+        authentication.authenticateUser(this.username, this.password);
     DocumentManagement documentManagement =
-        soapFactory.newDocumentManagement();
+        soapFactory.newDocumentManagement(authenticationToken);
     ArrayList<DocId> docIds = new ArrayList<DocId>();
     for (StartPoint startPoint : this.startPoints) {
       if (isValidStartPoint(startPoint, documentManagement)) {
@@ -148,9 +154,8 @@ public class OpentextAdaptor extends AbstractAdaptor {
   @VisibleForTesting
   interface SoapFactory {
     Authentication newAuthentication();
-    DocumentManagement newDocumentManagement();
+    DocumentManagement newDocumentManagement(String authenticationToken);
     void configure(Config config);
-    void setAuthenticationToken(String authenticationToken);
   }
 
   @VisibleForTesting
@@ -158,7 +163,6 @@ public class OpentextAdaptor extends AbstractAdaptor {
     private final Authentication_Service authenticationService;
     private final DocumentManagement_Service documentManagementService;
     private String webServicesUrl;
-    private String authenticationToken;
 
     SoapFactoryImpl() {
       this.authenticationService = new Authentication_Service(
@@ -187,14 +191,15 @@ public class OpentextAdaptor extends AbstractAdaptor {
     }
 
     @Override
-    public DocumentManagement newDocumentManagement() {
+    public DocumentManagement newDocumentManagement(
+        String authenticationToken) {
       DocumentManagement documentManagementPort =
           documentManagementService.getBasicHttpBindingDocumentManagement();
       ((BindingProvider) documentManagementPort).getRequestContext().put(
           BindingProvider.ENDPOINT_ADDRESS_PROPERTY,
           getWebServiceAddress("DocumentManagement"));
       AuthenticationHandler handler =
-          new AuthenticationHandler(this.authenticationToken);
+          new AuthenticationHandler(authenticationToken);
       List<Handler> chain = Arrays.asList((Handler) handler);
       ((BindingProvider) documentManagementPort)
           .getBinding().setHandlerChain(chain);
@@ -204,11 +209,6 @@ public class OpentextAdaptor extends AbstractAdaptor {
     @Override
     public void configure(Config config) {
       this.webServicesUrl = config.getValue("opentext.webServicesUrl");
-    }
-
-    @Override
-    public void setAuthenticationToken(String authenticationToken) {
-      this.authenticationToken = authenticationToken;
     }
  }
 
