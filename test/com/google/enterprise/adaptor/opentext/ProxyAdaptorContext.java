@@ -16,9 +16,12 @@ package com.google.enterprise.adaptor.opentext;
 
 import com.google.enterprise.adaptor.AdaptorContext;
 import com.google.enterprise.adaptor.Config;
+import com.google.enterprise.adaptor.DocId;
+import com.google.enterprise.adaptor.DocIdEncoder;
 import com.google.enterprise.adaptor.SensitiveValueDecoder;
 
 import java.lang.reflect.Proxy;
+import java.net.URI;
 
 class ProxyAdaptorContext {
   public static AdaptorContext getInstance() {
@@ -37,6 +40,14 @@ class ProxyAdaptorContext {
       return new SensitiveValueDecoder() {
         public String decodeValue(String nonReadable) {
           return nonReadable;
+        }
+      };
+    }
+
+    public DocIdEncoder getDocIdEncoder() {
+      return new DocIdEncoder() {
+        public URI encodeDocId(DocId docId) {
+          return URI.create(docId.getUniqueId());
         }
       };
     }

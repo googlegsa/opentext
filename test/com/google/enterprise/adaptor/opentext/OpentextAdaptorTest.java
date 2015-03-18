@@ -18,12 +18,14 @@ import static com.google.enterprise.adaptor.opentext.OpentextAdaptor.SoapFactory
 import static com.google.enterprise.adaptor.opentext.OpentextAdaptor.SoapFactoryImpl;
 import static org.junit.Assert.*;
 
+import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.enterprise.adaptor.AdaptorContext;
 import com.google.enterprise.adaptor.Config;
 import com.google.enterprise.adaptor.DocId;
 import com.google.enterprise.adaptor.DocIdPusher;
 import com.google.enterprise.adaptor.InvalidConfigurationException;
+import com.google.enterprise.adaptor.Response;
 
 import com.opentext.livelink.service.core.Authentication;
 import com.opentext.livelink.service.docman.DocumentManagement;
@@ -33,7 +35,12 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.lang.reflect.Proxy;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import javax.xml.namespace.QName;
@@ -170,7 +177,7 @@ public class OpentextAdaptorTest {
     List<StartPoint> startPoints = adaptor.getStartPoints();
     assertEquals(1, startPoints.size());
     assertStartPointEquals(startPoints.get(0),
-        StartPoint.Type.VOLUME, "EnterpriseWS", -1);
+        StartPoint.Type.VOLUME, "EnterpriseWS", 2000);
   }
 
   @Test
@@ -289,6 +296,119 @@ public class OpentextAdaptorTest {
     assertEquals("1003", docIdPusherMock.docIds.get(1).getUniqueId());
   }
 
+  @Test
+  public void testGetPath() {
+    assertEquals(Lists.newArrayList("foo"),
+        OpentextAdaptor.getPath(new DocId("foo")));
+    assertEquals(Lists.newArrayList("foo", "bar", "baz"),
+        OpentextAdaptor.getPath(new DocId("foo/bar/baz")));
+    // Object names can contain slashes.
+    assertEquals(Lists.newArrayList("foo", "bar/baz"),
+        OpentextAdaptor.getPath(new DocId("foo/bar%2Fbaz")));
+  }
+
+  @Test
+  public void testGetNodeStartPoint() throws InterruptedException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = context.getConfig();
+    adaptor.initConfig(config);
+    config.overrideKey("opentext.username", "validuser");
+    config.overrideKey("opentext.password", "validpassword");
+    config.overrideKey("opentext.webServicesUrl",
+        "http://example.com/les-services/services");
+    config.overrideKey("opentext.src", "EnterpriseWS");
+    adaptor.init(context);
+
+    DocumentManagement documentManagement =
+        soapFactory.newDocumentManagement("token");
+    Node node = adaptor.getNode(documentManagement, new DocId("EnterpriseWS"));
+    assertNotNull(node);
+    assertEquals(2000, node.getID());
+    assertEquals("Enterprise Workspace", node.getName());
+
+    assertNull(adaptor.getNode(documentManagement,
+            new DocId("InvalidStartPoint")));
+  }
+
+  @Test
+  public void testGetNodePath() throws InterruptedException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = context.getConfig();
+    adaptor.initConfig(config);
+    config.overrideKey("opentext.username", "validuser");
+    config.overrideKey("opentext.password", "validpassword");
+    config.overrideKey("opentext.webServicesUrl",
+        "http://example.com/les-services/services");
+    config.overrideKey("opentext.src", "EnterpriseWS");
+    adaptor.init(context);
+
+    DocumentManagement documentManagement =
+        soapFactory.newDocumentManagement("token");
+
+    NodeMock testNode = new NodeMock(3214, "Important Document");
+    testNode.setStartPointId(2000);
+    testNode.setPath("folder 1", "folder 2", "Important Document");
+    soapFactory.documentManagementMock.addNode(testNode);
+
+    Node node = adaptor.getNode(documentManagement,
+        new DocId("EnterpriseWS/folder+1/folder+2/Important+Document"));
+    assertNotNull("Couldn't find test node", node);
+    assertEquals(3214, node.getID());
+    assertEquals("Important Document", node.getName());
+  }
+
+  @Test
+  public void testDoContainer() throws IOException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+
+    // Set up a test folder with content.
+    NodeMock containerNode = new NodeMock(3000, "Folder");
+    containerNode.setStartPointId(2000);
+    containerNode.setPath("Folder");
+    soapFactory.documentManagementMock.addNode(containerNode);
+    for (int i = 1; i <= 3; i++) {
+      NodeMock testNode = new NodeMock(4000 + i, "Document " + i);
+      testNode.setStartPointId(2000);
+      testNode.setPath("Folder", "Document " + i);
+      soapFactory.documentManagementMock.addNode(testNode);
+    }
+
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = context.getConfig();
+    adaptor.initConfig(config);
+    config.overrideKey("opentext.username", "validuser");
+    config.overrideKey("opentext.password", "validpassword");
+    config.overrideKey("opentext.webServicesUrl",
+        "http://example.com/les-services/services");
+    config.overrideKey("opentext.src", "EnterpriseWS");
+    adaptor.init(context);
+
+    ResponseMock responseMock = new ResponseMock();
+    Response response = Proxies.newProxyInstance(Response.class,
+        responseMock);
+
+    DocumentManagement documentManagement =
+        soapFactory.newDocumentManagement("token");
+    adaptor.doContainer(documentManagement, new DocId("2000/Folder"),
+        containerNode, response);
+
+    // I think the links don't get relativized because I'm not
+    // creating anything with a scheme in the tests.
+    String expected = "<!DOCTYPE html>\n"
+        + "<html><head><title>Folder 2000/Folder</title></head>"
+        + "<body><h1>Folder 2000/Folder</h1>"
+        + "<li><a href=\"2000/Folder/Document+1\">Document 1</a></li>"
+        + "<li><a href=\"2000/Folder/Document+2\">Document 2</a></li>"
+        + "<li><a href=\"2000/Folder/Document+3\">Document 3</a></li>"
+        + "</body></html>";
+    assertEquals(expected, responseMock.outputStream.toString("UTF-8"));
+  }
+
   private class SoapFactoryMock implements SoapFactory {
     private AuthenticationMock authenticationMock;
     private DocumentManagementMock documentManagementMock;
@@ -370,37 +490,130 @@ public class OpentextAdaptorTest {
   }
 
   private class DocumentManagementMock {
-    public Node getNode(long nodeId) {
-      if (nodeId == 1002) // Invalid ID for testing.
-        return null;
-      return new NodeMock(nodeId, "test name");
+    List<NodeMock> nodes = new ArrayList<NodeMock>();
+
+    DocumentManagementMock() {
+      this.nodes.add(new NodeMock(2000, "Enterprise Workspace"));
+      this.nodes.add(new NodeMock(1001, "test node 1001"));
+      this.nodes.add(new NodeMock(1003, "test node 1003"));
     }
 
-    public Node getRootNode(String rootNodeType) {
-      if ("EnterpriseWS".equals(rootNodeType)) {
-        return new NodeMock(2000, "Enterprise Workspace");
+    private void addNode(NodeMock node) {
+      nodes.add(node);
+    }
+
+    private NodeMock findNode(long nodeId) {
+      for (NodeMock node : this.nodes) {
+        if (node.getID() == nodeId) {
+          return node;
+        }
       }
       return null;
     }
 
-    private class NodeMock extends Node {
-      private long id;
-      private String name;
+    public Node getNode(long nodeId) {
+      if (nodeId == 1002) // Invalid ID for testing.
+        return null;
+      return findNode(nodeId);
+    }
 
-      private NodeMock(long id, String name) {
-        this.id = id;
-        this.name = name;
+    public Node getRootNode(String rootNodeType) {
+      if ("EnterpriseWS".equals(rootNodeType)) {
+        return findNode(2000);
       }
+      return null;
+    }
 
-      @Override
-      public long getID() {
-        return this.id;
+    public Node getNodeByPath(long containerNodeId, List<String> path) {
+      for (NodeMock node : this.nodes) {
+        if (node.getStartPointId() == containerNodeId &&
+            node.getPath().equals(path)) {
+          return node;
+        }
       }
+      return null;
+    }
 
-      @Override
-      public String getName() {
-        return this.name;
+    public List<Node> listNodes(long containerNodeId, boolean partialData) {
+      List<Node> results = new ArrayList<Node>();
+      NodeMock containerNode = findNode(containerNodeId);
+      List<String> containerPath = containerNode.getPath();
+      for (NodeMock node : this.nodes) {
+        List<String> nodePath = node.getPath();
+        if (nodePath == null) {
+          continue;
+        }
+        if ((containerPath.size() + 1) == nodePath.size() &&
+            containerPath.equals(nodePath.subList(0, nodePath.size() - 1))) {
+          results.add(node);
+        }
       }
+      return results;
+    }
+  }
+
+  private class NodeMock extends Node {
+    private long id;
+    private String name;
+    private List<String> path;
+    private long startPointId;
+
+    private NodeMock(long id, String name) {
+      this.id = id;
+      this.name = name;
+    }
+
+    @Override
+    public long getID() {
+      return this.id;
+    }
+
+    @Override
+    public String getName() {
+      return this.name;
+    }
+
+    // For testing getNodeByPath
+    long getStartPointId() {
+      return this.startPointId;
+    }
+
+    void setStartPointId(long startPointId) {
+      this.startPointId = startPointId;
+    }
+
+    // For testing getNodeByPath
+    List<String> getPath() {
+      return this.path;
+    }
+
+    void setPath(String... path) {
+      this.path = Arrays.asList(path);
+    }
+
+    public String toString() {
+      StringBuilder builder = new StringBuilder();
+      builder.append(name)
+          .append("(").append(id).append(")")
+          .append("[").append(startPointId).append("/");
+      Joiner.on("/").appendTo(builder, path);
+      builder.append("]");
+      return builder.toString();
+    }
+  }
+
+  private class ResponseMock {
+    private ByteArrayOutputStream outputStream;
+
+    ResponseMock() {
+      this.outputStream = new ByteArrayOutputStream();
+    }
+
+    public OutputStream getOutputStream() {
+      return outputStream;
+    }
+
+    public void setContentType(String contentType) {
     }
   }
 

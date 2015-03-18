@@ -29,11 +29,20 @@ import com.opentext.livelink.service.core.Authentication;
 import com.opentext.livelink.service.core.Authentication_Service;
 import com.opentext.livelink.service.docman.DocumentManagement;
 import com.opentext.livelink.service.docman.DocumentManagement_Service;
+import com.opentext.livelink.service.docman.GetNodesInContainerOptions;
 import com.opentext.livelink.service.docman.Node;
 
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.UnsupportedEncodingException;
+import java.io.Writer;
+import java.net.URLDecoder;
+import java.net.URLEncoder;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -47,11 +56,14 @@ public class OpentextAdaptor extends AbstractAdaptor {
 
   private static final Logger log
       = Logger.getLogger(OpentextAdaptor.class.getName());
+  /** Charset used in generated HTML responses. */
+  private static final Charset CHARSET = Charset.forName("UTF-8");
 
   public static void main(String[] args) {
     AbstractAdaptor.main(new OpentextAdaptor(), args);
   }
 
+  private AdaptorContext context;
   private final SoapFactory soapFactory;
   private String username;
   private String password;
@@ -86,6 +98,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
    */
   @Override
   public void init(AdaptorContext context) {
+    this.context = context;
     Config config = context.getConfig();
     this.soapFactory.configure(config);
 
@@ -100,8 +113,10 @@ public class OpentextAdaptor extends AbstractAdaptor {
 
 
     Authentication authentication = soapFactory.newAuthentication();
+    String authenticationToken;
     try {
-      authentication.authenticateUser(username, password);
+      authenticationToken =
+          authentication.authenticateUser(username, password);
     } catch (SOAPFaultException soapFaultException) {
       SOAPFault fault = soapFaultException.getFault();
       String localPart = fault.getFaultCodeAsQName().getLocalPart();
@@ -127,6 +142,18 @@ public class OpentextAdaptor extends AbstractAdaptor {
       // any of either, we're not going to get far.
       throw new InvalidConfigurationException("No valid opentext.src values.");
     }
+
+    // Compute a node id for all start points.
+    DocumentManagement documentManagement =
+        soapFactory.newDocumentManagement(authenticationToken);
+    for (StartPoint startPoint : this.startPoints) {
+      if (startPoint.getType() == StartPoint.Type.VOLUME) {
+        Node node = documentManagement.getRootNode(startPoint.getName());
+        if (node != null) {
+          startPoint.setNodeId(node.getID());
+        }
+      }
+    }
   }
 
   @Override
@@ -148,7 +175,101 @@ public class OpentextAdaptor extends AbstractAdaptor {
 
   /** Gives the bytes of a document referenced with id. */
   @Override
-  public void getDocContent(Request req, Response resp) {
+  public void getDocContent(Request req, Response resp)
+      throws IOException {
+
+    Authentication authentication = this.soapFactory.newAuthentication();
+    String authenticationToken =
+        authentication.authenticateUser(this.username, this.password);
+    DocumentManagement documentManagement =
+        this.soapFactory.newDocumentManagement(authenticationToken);
+    DocId docId = req.getDocId();
+    Node node = getNode(documentManagement, docId);
+    if (node == null) {
+      log.log(Level.INFO, "Not found: {0}", docId);
+      resp.respondNotFound();
+      return;
+    }
+
+    if (node.isIsContainer()) {
+      // TODO: restrict the types of containers we handle.
+      doContainer(documentManagement, docId, node, resp);
+    } else {
+      // TODO: return document content.
+      resp.respondNotFound();
+    }
+  }
+
+  @VisibleForTesting
+  void doContainer(DocumentManagement documentManagement, DocId docId,
+      Node containerNode, Response response) throws IOException {
+
+    List<Node> containerContents;
+    try {
+      // The second argument causes listNodes to return partial
+      // content, but that content includes the name.
+      containerContents = documentManagement.listNodes(containerNode.getID(),
+          true);
+    } catch (SOAPFaultException soapFaultException) {
+      log.log(Level.WARNING, "Error retrieving container contents: " + docId,
+          soapFaultException);
+      return;
+    }
+
+    response.setContentType("text/html; charset=" + CHARSET.name());
+    Writer writer = new OutputStreamWriter(response.getOutputStream(),
+        CHARSET);
+    HtmlResponseWriter responseWriter = new HtmlResponseWriter(
+        writer, this.context.getDocIdEncoder(), Locale.ENGLISH);
+    responseWriter.start(docId, docId.getUniqueId());
+    for (Node node : containerContents) {
+      String name = node.getName();
+      String encodedName;
+      try {
+        encodedName = URLEncoder.encode(name, CHARSET.name());
+      } catch (UnsupportedEncodingException unsupportedEncoding) {
+        log.log(Level.WARNING, "Error encoding value: " + name,
+            unsupportedEncoding);
+        encodedName = name;
+      }
+      responseWriter.addLink(
+          new DocId(docId.getUniqueId() + "/" + encodedName), name);
+    }
+    responseWriter.finish();
+  }
+
+  @VisibleForTesting
+  Node getNode(DocumentManagement documentManagement, DocId docId) {
+    List<String> path = OpentextAdaptor.getPath(docId);
+    StartPoint startPoint = getStartPointByName(path.get(0));
+    if (startPoint == null) {
+      log.log(Level.WARNING,
+          "Invalid start point in doc id: {0}", path.get(0));
+      return null;
+    }
+    try {
+      Node node;
+      if (path.size() == 1) {
+        node = documentManagement.getNode(startPoint.getNodeId());
+      } else {
+        node = documentManagement.getNodeByPath(startPoint.getNodeId(),
+            path.subList(1, path.size()));
+      }
+      return node;
+    } catch (SOAPFaultException soapFaultException) {
+      log.log(Level.WARNING, "Error retrieving item: " + docId,
+          soapFaultException);
+      return null;
+    }
+  }
+
+  private StartPoint getStartPointByName(String name) {
+    for (StartPoint startPoint : this.startPoints) {
+      if (name.equals(startPoint.getName())) {
+        return startPoint;
+      }
+    }
+    return null;
   }
 
   @VisibleForTesting
@@ -238,25 +359,37 @@ public class OpentextAdaptor extends AbstractAdaptor {
       DocumentManagement documentManagement) {
 
     try {
-      Node node = null;
       if (startPoint.getType() == StartPoint.Type.NODE) {
-        node = documentManagement.getNode(startPoint.getNodeId());
-      } else {
-        node = documentManagement.getRootNode(startPoint.getName());
+        Node node = documentManagement.getNode(startPoint.getNodeId());
         if (node != null) {
-          startPoint.setNodeId(node.getID());
+          return true;
+        }
+      } else if (startPoint.getType() == StartPoint.Type.VOLUME) {
+        // init() will have checked for a node id
+        if (startPoint.getNodeId() != -1) {
+          return true;
         }
       }
-      if (node != null) {
-        return true;
-      } else {
-        log.log(Level.WARNING, "No such start point: " + startPoint);
-        return false;
-      }
+      log.log(Level.WARNING, "No such start point: " + startPoint);
+      return false;
     } catch (SOAPFaultException soapFaultException) {
       log.log(Level.WARNING, "Unable to access start point: " + startPoint,
           soapFaultException);
       return false;
     }
+  }
+
+  @VisibleForTesting
+  static List<String> getPath(DocId docId) {
+    String[] path = docId.getUniqueId().split("/");
+    for (int i = 0; i < path.length; i++) {
+      try {
+        path[i] = URLDecoder.decode(path[i], CHARSET.name());
+      } catch (UnsupportedEncodingException unsupportedEncoding) {
+        log.log(Level.WARNING, "Error decoding value: " + path[i],
+            unsupportedEncoding);
+      }
+    }
+    return Arrays.asList(path);
   }
 }
