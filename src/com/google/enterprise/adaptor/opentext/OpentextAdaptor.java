@@ -21,34 +21,48 @@ import com.google.enterprise.adaptor.AdaptorContext;
 import com.google.enterprise.adaptor.Config;
 import com.google.enterprise.adaptor.DocId;
 import com.google.enterprise.adaptor.DocIdPusher;
+import com.google.enterprise.adaptor.IOHelper;
 import com.google.enterprise.adaptor.InvalidConfigurationException;
 import com.google.enterprise.adaptor.Request;
 import com.google.enterprise.adaptor.Response;
 
 import com.opentext.livelink.service.core.Authentication;
 import com.opentext.livelink.service.core.Authentication_Service;
+import com.opentext.livelink.service.core.ContentService;
+import com.opentext.livelink.service.core.ContentService_Service;
 import com.opentext.livelink.service.docman.DocumentManagement;
 import com.opentext.livelink.service.docman.DocumentManagement_Service;
 import com.opentext.livelink.service.docman.GetNodesInContainerOptions;
 import com.opentext.livelink.service.docman.Node;
+import com.opentext.livelink.service.docman.NodeVersionInfo;
+import com.opentext.livelink.service.docman.Version;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStreamWriter;
 import java.io.UnsupportedEncodingException;
 import java.io.Writer;
+import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.Charset;
+import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import javax.activation.DataHandler;
+import javax.xml.datatype.XMLGregorianCalendar;
 import javax.xml.soap.SOAPFault;
 import javax.xml.ws.BindingProvider;
 import javax.xml.ws.handler.Handler;
+import javax.xml.ws.soap.MTOMFeature;
 import javax.xml.ws.soap.SOAPFaultException;
 
 /** For getting OpenText repository content into a Google Search Appliance. */
@@ -69,6 +83,9 @@ public class OpentextAdaptor extends AbstractAdaptor {
   private String password;
   /** Configured start points, with unknown values removed. */
   private List<StartPoint> startPoints;
+  private String contentServerUrl;
+  private Map<String, String> queryStrings;
+  private Map<String, String> objectActions;
 
   public OpentextAdaptor() {
     this(new SoapFactoryImpl());
@@ -86,6 +103,11 @@ public class OpentextAdaptor extends AbstractAdaptor {
     config.addKey("opentext.password", null);
     config.addKey("opentext.src", "EnterpriseWS");
     config.addKey("opentext.src.separator", ",");
+    config.addKey("opentext.displayUrl.contentServerUrl", null);
+    config.addKey("opentext.displayUrl.queryString.default",
+        "?func=ll&objAction={0}&objId={1}");
+    config.addKey("opentext.displayUrl.objAction.Document", "overview");
+    config.addKey("opentext.displayUrl.objAction.default", "properties");
   }
 
   /**
@@ -154,6 +176,19 @@ public class OpentextAdaptor extends AbstractAdaptor {
         }
       }
     }
+
+    this.contentServerUrl =
+        config.getValue("opentext.displayUrl.contentServerUrl");
+    this.queryStrings =
+        config.getValuesWithPrefix("opentext.displayUrl.queryString.");
+    this.objectActions =
+        config.getValuesWithPrefix("opentext.displayUrl.objAction.");
+    log.log(Level.CONFIG, "opentext.displayUrl.contentServerUrl: {0}",
+        this.contentServerUrl);
+    log.log(Level.CONFIG, "opentext.displayUrl.queryString: {0}",
+        this.queryStrings);
+    log.log(Level.CONFIG, "opentext.displayUrl.objAction: {0}",
+        this.objectActions);
   }
 
   @Override
@@ -195,8 +230,12 @@ public class OpentextAdaptor extends AbstractAdaptor {
       // TODO: restrict the types of containers we handle.
       doContainer(documentManagement, docId, node, resp);
     } else {
-      // TODO: return document content.
-      resp.respondNotFound();
+      if ("Document".equals(node.getType())) {
+        doDocument(documentManagement, docId, node, resp);
+      } else {
+        // TODO: other types.
+        resp.respondNotFound();
+      }
     }
   }
 
@@ -217,6 +256,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
     }
 
     response.setContentType("text/html; charset=" + CHARSET.name());
+    // TODO: add displayUrl for container in Content Server
     Writer writer = new OutputStreamWriter(response.getOutputStream(),
         CHARSET);
     HtmlResponseWriter responseWriter = new HtmlResponseWriter(
@@ -272,10 +312,76 @@ public class OpentextAdaptor extends AbstractAdaptor {
     return null;
   }
 
+  /**
+   * Return document content.
+   *
+   * @throws SOAPFaultException if the document content can't be read
+   */
+  @VisibleForTesting
+  void doDocument(DocumentManagement documentManagement, DocId docId,
+      Node documentNode, Response response) throws IOException {
+    if (!documentNode.isIsVersionable()) {
+      throw new UnsupportedOperationException(
+          "Document does not support versions: " + docId);
+    }
+
+    // 0 indicates the most recent version.
+    Version version = documentManagement.getVersion(documentNode.getID(), 0);
+    long versionNumber = version.getNumber();
+    String contextId = documentManagement.getVersionContentsContext(
+        documentNode.getID(), versionNumber);
+    ContentService contentService =
+        this.soapFactory.newContentService(documentManagement);
+    DataHandler dataHandler = contentService.downloadContent(contextId);
+
+    String contentType = version.getMimeType();
+    if (contentType != null) {
+      response.setContentType(contentType);
+    }
+    XMLGregorianCalendar xmlCalendar = version.getModifyDate();
+    if (xmlCalendar != null) {
+      Date lastModifiedDate = xmlCalendar.toGregorianCalendar().getTime();
+      response.setLastModified(lastModifiedDate);
+    }
+    response.setDisplayUrl(
+        getDisplayUrl(documentNode.getType(), documentNode.getID()));
+    InputStream inputStream = dataHandler.getInputStream();
+    try {
+      if (inputStream != null) {
+        IOHelper.copyStream(inputStream, response.getOutputStream());
+      }
+    } finally {
+      if (inputStream != null) {
+        try {
+          inputStream.close();
+        } catch (IOException ioException) {
+          log.log(Level.FINE, "Error closing document stream", ioException);
+        }
+      }
+    }
+  }
+
+  @VisibleForTesting
+  URI getDisplayUrl(String objectType, long objectId) {
+    String queryString = this.queryStrings.get(objectType);
+    if (queryString == null) {
+      queryString = this.queryStrings.get("default");
+    }
+    String objectAction = this.objectActions.get(objectType);
+    if (objectAction == null) {
+      objectAction = this.objectActions.get("default");
+    }
+    StringBuilder builder = new StringBuilder(this.contentServerUrl);
+    builder.append(MessageFormat.format(queryString, objectAction,
+            Long.toString(objectId)));
+    return URI.create(builder.toString());
+  }
+
   @VisibleForTesting
   interface SoapFactory {
     Authentication newAuthentication();
     DocumentManagement newDocumentManagement(String authenticationToken);
+    ContentService newContentService(DocumentManagement documentManagement);
     void configure(Config config);
   }
 
@@ -283,6 +389,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
   static class SoapFactoryImpl implements SoapFactory {
     private final Authentication_Service authenticationService;
     private final DocumentManagement_Service documentManagementService;
+    private final ContentService_Service contentServiceService;
     private String webServicesUrl;
 
     SoapFactoryImpl() {
@@ -291,6 +398,9 @@ public class OpentextAdaptor extends AbstractAdaptor {
       this.documentManagementService = new DocumentManagement_Service(
           DocumentManagement_Service.class.getResource(
               "DocumentManagement.wsdl"));
+      this.contentServiceService = new ContentService_Service(
+          ContentService_Service.class.getResource(
+              "ContentService.wsdl"));
     }
 
     @VisibleForTesting
@@ -305,9 +415,10 @@ public class OpentextAdaptor extends AbstractAdaptor {
     public Authentication newAuthentication() {
       Authentication authenticationPort =
           authenticationService.getBasicHttpBindingAuthentication();
-      ((BindingProvider) authenticationPort).getRequestContext().put(
-          BindingProvider.ENDPOINT_ADDRESS_PROPERTY,
-          getWebServiceAddress("Authentication"));
+
+      setEndpointAddress(
+          (BindingProvider) authenticationPort, "Authentication");
+
       return authenticationPort;
     }
 
@@ -316,15 +427,53 @@ public class OpentextAdaptor extends AbstractAdaptor {
         String authenticationToken) {
       DocumentManagement documentManagementPort =
           documentManagementService.getBasicHttpBindingDocumentManagement();
-      ((BindingProvider) documentManagementPort).getRequestContext().put(
-          BindingProvider.ENDPOINT_ADDRESS_PROPERTY,
-          getWebServiceAddress("DocumentManagement"));
-      AuthenticationHandler handler =
-          new AuthenticationHandler(authenticationToken);
-      List<Handler> chain = Arrays.asList((Handler) handler);
-      ((BindingProvider) documentManagementPort)
-          .getBinding().setHandlerChain(chain);
+
+      setEndpointAddress(
+          (BindingProvider) documentManagementPort, "DocumentManagement");
+      setAuthenticationHandler(
+          (BindingProvider) documentManagementPort, authenticationToken);
+
       return documentManagementPort;
+    }
+
+    @Override
+    public ContentService newContentService(
+        DocumentManagement documentManagement) {
+      ContentService contentServicePort =
+          contentServiceService.getBasicHttpBindingContentService(
+              new MTOMFeature());
+
+      setEndpointAddress(
+          (BindingProvider) contentServicePort, "ContentService");
+      setAuthenticationHandler(
+          (BindingProvider) contentServicePort,
+          getAuthenticationToken((BindingProvider) documentManagement));
+
+      return contentServicePort;
+    }
+
+    private void setEndpointAddress(BindingProvider bindingProvider,
+        String serviceName) {
+      bindingProvider.getRequestContext().put(
+          BindingProvider.ENDPOINT_ADDRESS_PROPERTY,
+          getWebServiceAddress(serviceName));
+    }
+
+    private String getAuthenticationToken(BindingProvider bindingProvider) {
+      List<Handler> chain = bindingProvider.getBinding().getHandlerChain();
+      for (Handler handler : chain) {
+        if (handler instanceof AuthenticationHandler) {
+          return ((AuthenticationHandler) handler).getAuthenticationToken();
+        }
+      }
+      throw new RuntimeException("Missing authentication handler");
+    }
+
+    private void setAuthenticationHandler(BindingProvider bindingProvider,
+        String authenticationToken) {
+      Handler handler = new AuthenticationHandler(authenticationToken);
+      List<Handler> chain = Arrays.asList(handler);
+      bindingProvider.getBinding().setHandlerChain(chain);
     }
 
     @Override

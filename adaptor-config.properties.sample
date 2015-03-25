@@ -10,3 +10,6 @@ opentext.password = <Password for Content Server user>
 # Start points may include EnterpriseWS and object ids
 opentext.src = <List of start points for document retrieval>
 opentext.src.separator = ,
+
+# URL for Content Server: http://<host>[:<port>]/OTCS/livelink.exe
+opentext.displayUrl.contentServerUrl = <Content Server URL>

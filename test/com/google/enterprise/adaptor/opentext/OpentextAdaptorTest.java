@@ -18,6 +18,8 @@ import static com.google.enterprise.adaptor.opentext.OpentextAdaptor.SoapFactory
 import static com.google.enterprise.adaptor.opentext.OpentextAdaptor.SoapFactoryImpl;
 import static org.junit.Assert.*;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.enterprise.adaptor.AdaptorContext;
@@ -28,21 +30,34 @@ import com.google.enterprise.adaptor.InvalidConfigurationException;
 import com.google.enterprise.adaptor.Response;
 
 import com.opentext.livelink.service.core.Authentication;
+import com.opentext.livelink.service.core.ContentService;
 import com.opentext.livelink.service.docman.DocumentManagement;
 import com.opentext.livelink.service.docman.Node;
+import com.opentext.livelink.service.docman.Version;
 
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Proxy;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
+import java.util.GregorianCalendar;
 import java.util.List;
 
+import javax.activation.DataHandler;
+import javax.activation.DataSource;
+import javax.xml.datatype.DatatypeConfigurationException;
+import javax.xml.datatype.DatatypeFactory;
+import javax.xml.datatype.XMLGregorianCalendar;
 import javax.xml.namespace.QName;
 import javax.xml.soap.SOAPException;
 import javax.xml.soap.SOAPFactory;
@@ -95,12 +110,7 @@ public class OpentextAdaptorTest {
     assertFalse("authUser called before init",
         soapFactory.authenticationMock.authenticateUserCalled);
     AdaptorContext context = ProxyAdaptorContext.getInstance();
-    Config config = context.getConfig();
-    adaptor.initConfig(config);
-    config.overrideKey("opentext.username", "validuser");
-    config.overrideKey("opentext.password", "validpassword");
-    config.overrideKey("opentext.webServicesUrl",
-        "http://example.com/les-services/services");
+    Config config = initConfig(adaptor, context);
     adaptor.init(context);
     assertTrue("authUser not called after init",
         soapFactory.authenticationMock.authenticateUserCalled);
@@ -167,12 +177,7 @@ public class OpentextAdaptorTest {
     SoapFactoryMock soapFactory = new SoapFactoryMock();
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
     AdaptorContext context = ProxyAdaptorContext.getInstance();
-    Config config = context.getConfig();
-    adaptor.initConfig(config);
-    config.overrideKey("opentext.username", "validuser");
-    config.overrideKey("opentext.password", "validpassword");
-    config.overrideKey("opentext.webServicesUrl",
-        "http://example.com/les-services/services");
+    Config config = initConfig(adaptor, context);
     adaptor.init(context);
     List<StartPoint> startPoints = adaptor.getStartPoints();
     assertEquals(1, startPoints.size());
@@ -259,12 +264,7 @@ public class OpentextAdaptorTest {
     SoapFactoryMock soapFactory = new SoapFactoryMock();
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
     AdaptorContext context = ProxyAdaptorContext.getInstance();
-    Config config = context.getConfig();
-    adaptor.initConfig(config);
-    config.overrideKey("opentext.username", "validuser");
-    config.overrideKey("opentext.password", "validpassword");
-    config.overrideKey("opentext.webServicesUrl",
-        "http://example.com/les-services/services");
+    Config config = initConfig(adaptor, context);
     adaptor.init(context);
 
     DocIdPusherMock docIdPusherMock = new DocIdPusherMock();
@@ -279,12 +279,7 @@ public class OpentextAdaptorTest {
     SoapFactoryMock soapFactory = new SoapFactoryMock();
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
     AdaptorContext context = ProxyAdaptorContext.getInstance();
-    Config config = context.getConfig();
-    adaptor.initConfig(config);
-    config.overrideKey("opentext.username", "validuser");
-    config.overrideKey("opentext.password", "validpassword");
-    config.overrideKey("opentext.webServicesUrl",
-        "http://example.com/les-services/services");
+    Config config = initConfig(adaptor, context);
     config.overrideKey("opentext.src", "1001, 1002, 1003");
     adaptor.init(context);
 
@@ -312,12 +307,7 @@ public class OpentextAdaptorTest {
     SoapFactoryMock soapFactory = new SoapFactoryMock();
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
     AdaptorContext context = ProxyAdaptorContext.getInstance();
-    Config config = context.getConfig();
-    adaptor.initConfig(config);
-    config.overrideKey("opentext.username", "validuser");
-    config.overrideKey("opentext.password", "validpassword");
-    config.overrideKey("opentext.webServicesUrl",
-        "http://example.com/les-services/services");
+    Config config = initConfig(adaptor, context);
     config.overrideKey("opentext.src", "EnterpriseWS");
     adaptor.init(context);
 
@@ -337,13 +327,7 @@ public class OpentextAdaptorTest {
     SoapFactoryMock soapFactory = new SoapFactoryMock();
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
     AdaptorContext context = ProxyAdaptorContext.getInstance();
-    Config config = context.getConfig();
-    adaptor.initConfig(config);
-    config.overrideKey("opentext.username", "validuser");
-    config.overrideKey("opentext.password", "validpassword");
-    config.overrideKey("opentext.webServicesUrl",
-        "http://example.com/les-services/services");
-    config.overrideKey("opentext.src", "EnterpriseWS");
+    Config config = initConfig(adaptor, context);
     adaptor.init(context);
 
     DocumentManagement documentManagement =
@@ -379,13 +363,7 @@ public class OpentextAdaptorTest {
 
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
     AdaptorContext context = ProxyAdaptorContext.getInstance();
-    Config config = context.getConfig();
-    adaptor.initConfig(config);
-    config.overrideKey("opentext.username", "validuser");
-    config.overrideKey("opentext.password", "validpassword");
-    config.overrideKey("opentext.webServicesUrl",
-        "http://example.com/les-services/services");
-    config.overrideKey("opentext.src", "EnterpriseWS");
+    Config config = initConfig(adaptor, context);
     adaptor.init(context);
 
     ResponseMock responseMock = new ResponseMock();
@@ -406,16 +384,112 @@ public class OpentextAdaptorTest {
         + "<li><a href=\"2000/Folder/Document+2\">Document 2</a></li>"
         + "<li><a href=\"2000/Folder/Document+3\">Document 3</a></li>"
         + "</body></html>";
-    assertEquals(expected, responseMock.outputStream.toString("UTF-8"));
+    assertEquals(expected,
+        responseMock.outputStream.toString("UTF-8"));
+  }
+
+  @Test
+  public void testGetDisplayUrl() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+
+    URI displayUrl = adaptor.getDisplayUrl("Document", 12345);
+    assertEquals("http://example.com/otcs/livelink.exe" +
+        "?func=ll&objAction=overview&objId=12345", displayUrl.toString());
+
+    displayUrl = adaptor.getDisplayUrl("UnknownType", 12345);
+    assertEquals("http://example.com/otcs/livelink.exe" +
+        "?func=ll&objAction=properties&objId=12345", displayUrl.toString());
+  }
+
+  @Test
+  public void testGetDisplayUrlPathInfo() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey(
+        "opentext.displayUrl.queryString.Document", "/open/{1}");
+    adaptor.init(context);
+
+    URI displayUrl = adaptor.getDisplayUrl("Document", 12345);
+    assertEquals("http://example.com/otcs/livelink.exe/open/12345",
+        displayUrl.toString());
+  }
+
+  @Test
+  public void testDoDocumentNoVersions() throws IOException {
+    DocId testDocId = new DocId("2000/Document Name");
+
+    thrown.expect(RuntimeException.class);
+    thrown.expectMessage(
+        "Document does not support versions: " + testDocId);
+
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    NodeMock documentNode = new NodeMock(3143, "Document Name");
+    documentNode.setIsVersionable(false);
+    soapFactory.documentManagementMock.addNode(documentNode);
+
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+
+    ResponseMock responseMock = new ResponseMock();
+    Response response = Proxies.newProxyInstance(Response.class,
+        responseMock);
+
+    DocumentManagement documentManagement =
+        soapFactory.newDocumentManagement("token");
+    adaptor.doDocument(documentManagement, testDocId, documentNode, response);
+  }
+
+  @Test
+  public void testDoDocument() throws IOException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+
+    GregorianCalendar lastModified =
+        new GregorianCalendar(2015, 1, 3, 9, 42, 42);
+    NodeMock documentNode =
+        new NodeMock(3143, "Title of Document", "Document");
+    documentNode.setVersion(1, "text/plain", lastModified);
+    soapFactory.documentManagementMock.addNode(documentNode);
+
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+
+    ResponseMock responseMock = new ResponseMock();
+    Response response = Proxies.newProxyInstance(Response.class,
+        responseMock);
+
+    DocumentManagement documentManagement =
+        soapFactory.newDocumentManagement("token");
+    adaptor.doDocument(documentManagement, new DocId("2000/Document"),
+        documentNode, response);
+
+    assertEquals("text/plain", responseMock.contentType);
+    assertEquals(lastModified.getTime(), responseMock.lastModified);
+    assertEquals("http://example.com/otcs/livelink.exe" +
+        "?func=ll&objAction=overview&objId=3143",
+        responseMock.displayUrl.toString());
+    assertEquals("this is the content",
+        responseMock.outputStream.toString("UTF-8"));
   }
 
   private class SoapFactoryMock implements SoapFactory {
     private AuthenticationMock authenticationMock;
     private DocumentManagementMock documentManagementMock;
+    private ContentServiceMock contentServiceMock;
 
     private SoapFactoryMock() {
       this.authenticationMock = new AuthenticationMock();
       this.documentManagementMock = new DocumentManagementMock();
+      this.contentServiceMock = new ContentServiceMock();
     }
 
     @Override
@@ -429,6 +503,13 @@ public class OpentextAdaptorTest {
         String authenticationToken) {
       return Proxies.newProxyInstance(DocumentManagement.class,
           this.documentManagementMock);
+    }
+
+    @Override
+    public ContentService newContentService(
+        DocumentManagement documentManagement) {
+      return Proxies.newProxyInstance(ContentService.class,
+          this.contentServiceMock);
     }
 
     @Override
@@ -550,17 +631,61 @@ public class OpentextAdaptorTest {
       }
       return results;
     }
+
+    public Version getVersion(long nodeId, long versionNumber) {
+      NodeMock node = findNode(nodeId);
+      return node.getVersion();
+    }
+
+    public String getVersionContentsContext(long nodeId, long versionNumber) {
+      return "versioncontext";
+    }
+  }
+
+  private class ContentServiceMock {
+    public DataHandler downloadContent(String contextId) {
+      DataSource dataSource = new DataSource() {
+          public String getContentType() {
+            return "text/plain";
+          }
+
+          public InputStream getInputStream() throws IOException {
+            return new ByteArrayInputStream(
+                "this is the content".getBytes(UTF_8));
+          }
+
+          public String getName() {
+            return "DataSourceName";
+          }
+
+          public OutputStream getOutputStream() throws IOException {
+            throw new IOException("Not available");
+          }
+        };
+
+      return new DataHandler(dataSource);
+    }
   }
 
   private class NodeMock extends Node {
     private long id;
     private String name;
+    private boolean isVersionable;
+    private String objectType;
+
     private List<String> path;
     private long startPointId;
+    private Version version;
 
     private NodeMock(long id, String name) {
       this.id = id;
       this.name = name;
+      this.isVersionable = true;
+    }
+
+    private NodeMock(long id, String name, String objectType) {
+      this(id, name);
+      this.objectType = objectType;
     }
 
     @Override
@@ -571,6 +696,21 @@ public class OpentextAdaptorTest {
     @Override
     public String getName() {
       return this.name;
+    }
+
+    @Override
+    public boolean isIsVersionable() {
+      return isVersionable;
+    }
+
+    @Override
+    public void setIsVersionable(boolean isVersionable) {
+      this.isVersionable = isVersionable;
+    }
+
+    @Override
+    public String getType() {
+      return this.objectType;
     }
 
     // For testing getNodeByPath
@@ -591,6 +731,16 @@ public class OpentextAdaptorTest {
       this.path = Arrays.asList(path);
     }
 
+    Version getVersion() {
+      return this.version;
+    }
+
+    void setVersion(long versionNumber, String contentType,
+        GregorianCalendar modifyDate) {
+      this.version
+          = new VersionMock(versionNumber, contentType, modifyDate);
+    }
+
     public String toString() {
       StringBuilder builder = new StringBuilder();
       builder.append(name)
@@ -602,8 +752,44 @@ public class OpentextAdaptorTest {
     }
   }
 
+  private class VersionMock extends Version {
+    private long versionNumber;
+    private String contentType;
+    private GregorianCalendar modifyDate;
+
+    private VersionMock(long versionNumber, String contentType,
+        GregorianCalendar modifyDate) {
+      this.versionNumber = versionNumber;
+      this.contentType = contentType;
+      this.modifyDate = modifyDate;
+    }
+
+    @Override
+    public long getNumber() {
+      return this.versionNumber;
+    }
+
+    @Override
+    public String getMimeType() {
+      return this.contentType;
+    }
+
+    @Override
+    public XMLGregorianCalendar getModifyDate() {
+      try {
+        return
+            DatatypeFactory.newInstance().newXMLGregorianCalendar(modifyDate);
+      } catch (DatatypeConfigurationException datatypeException) {
+        return null;
+      }
+    }
+  }
+
   private class ResponseMock {
     private ByteArrayOutputStream outputStream;
+    private String contentType;
+    private Date lastModified;
+    private URI displayUrl;
 
     ResponseMock() {
       this.outputStream = new ByteArrayOutputStream();
@@ -614,6 +800,15 @@ public class OpentextAdaptorTest {
     }
 
     public void setContentType(String contentType) {
+      this.contentType = contentType;
+    }
+
+    public void setLastModified(Date lastModified) {
+      this.lastModified = lastModified;
+    }
+
+    public void setDisplayUrl(URI displayUrl) {
+      this.displayUrl = displayUrl;
     }
   }
 
@@ -622,5 +817,18 @@ public class OpentextAdaptorTest {
     assertEquals(expectedType, actual.getType());
     assertEquals(expectedName, actual.getName());
     assertEquals(expectedNodeId, actual.getNodeId());
+  }
+
+  // Set all the required config properties.
+  private Config initConfig(OpentextAdaptor adaptor, AdaptorContext context) {
+    Config config = context.getConfig();
+    adaptor.initConfig(config);
+    config.overrideKey("opentext.username", "validuser");
+    config.overrideKey("opentext.password", "validpassword");
+    config.overrideKey("opentext.webServicesUrl",
+        "http://example.com/les-services/services");
+    config.overrideKey("opentext.displayUrl.contentServerUrl",
+        "http://example.com/otcs/livelink.exe");
+    return config;
   }
 }
