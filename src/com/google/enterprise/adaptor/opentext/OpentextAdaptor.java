@@ -49,6 +49,7 @@ import java.nio.charset.Charset;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -201,7 +202,8 @@ public class OpentextAdaptor extends AbstractAdaptor {
     ArrayList<DocId> docIds = new ArrayList<DocId>();
     for (StartPoint startPoint : this.startPoints) {
       if (isValidStartPoint(startPoint, documentManagement)) {
-        docIds.add(new DocId(startPoint.getName()));
+        docIds.add(
+            new DocId(startPoint.getName() + ":" + startPoint.getNodeId()));
       }
     }
     log.log(Level.FINER, "Sending doc ids: {0}", docIds);
@@ -218,20 +220,20 @@ public class OpentextAdaptor extends AbstractAdaptor {
         authentication.authenticateUser(this.username, this.password);
     DocumentManagement documentManagement =
         this.soapFactory.newDocumentManagement(authenticationToken);
-    DocId docId = req.getDocId();
-    Node node = getNode(documentManagement, docId);
+    OpentextDocId opentextDocId = new OpentextDocId(req.getDocId());
+    Node node = getNode(documentManagement, opentextDocId);
     if (node == null) {
-      log.log(Level.INFO, "Not found: {0}", docId);
+      log.log(Level.INFO, "Not found: {0}", opentextDocId);
       resp.respondNotFound();
       return;
     }
 
     if (node.isIsContainer()) {
       // TODO: restrict the types of containers we handle.
-      doContainer(documentManagement, docId, node, resp);
+      doContainer(documentManagement, opentextDocId, node, resp);
     } else {
       if ("Document".equals(node.getType())) {
-        doDocument(documentManagement, docId, node, resp);
+        doDocument(documentManagement, opentextDocId, node, resp);
       } else {
         // TODO: other types.
         resp.respondNotFound();
@@ -240,8 +242,9 @@ public class OpentextAdaptor extends AbstractAdaptor {
   }
 
   @VisibleForTesting
-  void doContainer(DocumentManagement documentManagement, DocId docId,
-      Node containerNode, Response response) throws IOException {
+  void doContainer(DocumentManagement documentManagement,
+      OpentextDocId opentextDocId, Node containerNode, Response response)
+      throws IOException {
 
     List<Node> containerContents;
     try {
@@ -250,7 +253,8 @@ public class OpentextAdaptor extends AbstractAdaptor {
       containerContents = documentManagement.listNodes(containerNode.getID(),
           true);
     } catch (SOAPFaultException soapFaultException) {
-      log.log(Level.WARNING, "Error retrieving container contents: " + docId,
+      log.log(Level.WARNING,
+          "Error retrieving container contents: " + opentextDocId,
           soapFaultException);
       return;
     }
@@ -261,7 +265,8 @@ public class OpentextAdaptor extends AbstractAdaptor {
         CHARSET);
     HtmlResponseWriter responseWriter = new HtmlResponseWriter(
         writer, this.context.getDocIdEncoder(), Locale.ENGLISH);
-    responseWriter.start(docId, docId.getUniqueId());
+    responseWriter.start(opentextDocId.getDocId(),
+        opentextDocId.getDocId().getUniqueId());
     for (Node node : containerContents) {
       String name = node.getName();
       String encodedName;
@@ -272,35 +277,99 @@ public class OpentextAdaptor extends AbstractAdaptor {
             unsupportedEncoding);
         encodedName = name;
       }
-      responseWriter.addLink(
-          new DocId(docId.getUniqueId() + "/" + encodedName), name);
+      // The ':' character is not allowed in Content Server names.
+      String uniqueId = opentextDocId.getEncodedPath() + "/"
+          + encodedName + ":" + node.getID();
+      responseWriter.addLink(new DocId(uniqueId), name);
     }
     responseWriter.finish();
   }
 
   @VisibleForTesting
-  Node getNode(DocumentManagement documentManagement, DocId docId) {
-    List<String> path = OpentextAdaptor.getPath(docId);
-    StartPoint startPoint = getStartPointByName(path.get(0));
-    if (startPoint == null) {
-      log.log(Level.WARNING,
-          "Invalid start point in doc id: {0}", path.get(0));
-      return null;
-    }
+  Node getNode(DocumentManagement documentManagement,
+      OpentextDocId opentextDocId) {
+    log.log(Level.FINER, "Looking up docId: " + opentextDocId);
+
+    // Use the object id to look up the node.
+    Node node;
     try {
-      Node node;
-      if (path.size() == 1) {
-        node = documentManagement.getNode(startPoint.getNodeId());
-      } else {
-        node = documentManagement.getNodeByPath(startPoint.getNodeId(),
-            path.subList(1, path.size()));
+      node = documentManagement.getNode(opentextDocId.getNodeId());
+      if (node == null) {
+        return null;
       }
-      return node;
     } catch (SOAPFaultException soapFaultException) {
-      log.log(Level.WARNING, "Error retrieving item: " + docId,
+      log.log(Level.WARNING, "Error retrieving item: " + opentextDocId,
           soapFaultException);
       return null;
     }
+
+    // Verify that the node we found still corresponds to the doc id.
+
+    // Check the start point in the doc id against the configured ones.
+    if (!isStartPointValid(opentextDocId)) {
+      return null;
+    }
+
+    List<String> path = opentextDocId.getPath();
+
+    // If the doc id is a start point, return the node.
+    if (path.size() == 1) {
+      return node;
+    }
+
+    try {
+      // If we can find it by path, the doc id is still valid.
+      StartPoint startPoint = getStartPointByName(path.get(0));
+      if (documentManagement.getNodeByPath(startPoint.getNodeId(),
+              path.subList(1, path.size())) != null) {
+        return node;
+      }
+
+      // Some nodes can't be retrieved directly by path (for
+      // example, nodes within a project). Build the current
+      // node's path by walking up the tree to the start point. A
+      // node that's a direct child of a volume will have a
+      // negative parent id; to find the corresponding parent
+      // node, we have to look up (-1 * id). Root nodes have a
+      // parent id of -1.
+      List<String> nodePath = new ArrayList<String>(path.size());
+      nodePath.add(node.getName());
+      long parentId = Math.abs(node.getParentID());
+      while (parentId != -1 && parentId != startPoint.getNodeId()) {
+        Node parentNode = documentManagement.getNode(parentId);
+        if (parentNode == null) {
+          log.log(Level.WARNING,
+              "Parent of '" + nodePath.get(nodePath.size() - 1)
+              + "' with id '" + parentId + "' not found: " + opentextDocId);
+          return null;
+        }
+        nodePath.add(parentNode.getName());
+        parentId = Math.abs(parentNode.getParentID());
+      }
+      nodePath.add(startPoint.getName());
+      Collections.reverse(nodePath);
+      if (!path.equals(nodePath)) {
+        log.log(Level.FINER,
+            "Doc id " + path + " does not match node path " + nodePath);
+        return null;
+      }
+      return node;
+    } catch (SOAPFaultException soapFaultException) {
+      log.log(Level.WARNING, "Error verifying item: " + opentextDocId,
+          soapFaultException);
+      return null;
+    }
+  }
+
+  private boolean isStartPointValid(OpentextDocId opentextDocId) {
+    StartPoint startPoint =
+        getStartPointByName(opentextDocId.getPath().get(0));
+    if (startPoint == null) {
+      log.log(Level.WARNING,
+          "Invalid start point in doc id: {0}", opentextDocId);
+      return false;
+    }
+    return true;
   }
 
   private StartPoint getStartPointByName(String name) {
@@ -318,11 +387,12 @@ public class OpentextAdaptor extends AbstractAdaptor {
    * @throws SOAPFaultException if the document content can't be read
    */
   @VisibleForTesting
-  void doDocument(DocumentManagement documentManagement, DocId docId,
-      Node documentNode, Response response) throws IOException {
+  void doDocument(DocumentManagement documentManagement,
+      OpentextDocId opentextDocId, Node documentNode, Response response)
+      throws IOException {
     if (!documentNode.isIsVersionable()) {
       throw new UnsupportedOperationException(
-          "Document does not support versions: " + docId);
+          "Document does not support versions: " + opentextDocId);
     }
 
     // 0 indicates the most recent version.
@@ -526,19 +596,5 @@ public class OpentextAdaptor extends AbstractAdaptor {
           soapFaultException);
       return false;
     }
-  }
-
-  @VisibleForTesting
-  static List<String> getPath(DocId docId) {
-    String[] path = docId.getUniqueId().split("/");
-    for (int i = 0; i < path.length; i++) {
-      try {
-        path[i] = URLDecoder.decode(path[i], CHARSET.name());
-      } catch (UnsupportedEncodingException unsupportedEncoding) {
-        log.log(Level.WARNING, "Error decoding value: " + path[i],
-            unsupportedEncoding);
-      }
-    }
-    return Arrays.asList(path);
   }
 }

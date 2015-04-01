@@ -44,7 +44,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Proxy;
 import java.net.URI;
 import java.util.ArrayList;
@@ -271,7 +270,8 @@ public class OpentextAdaptorTest {
     adaptor.getDocIds(
         Proxies.newProxyInstance(DocIdPusher.class, docIdPusherMock));
     assertEquals(1, docIdPusherMock.docIds.size());
-    assertEquals("EnterpriseWS", docIdPusherMock.docIds.get(0).getUniqueId());
+    assertEquals(
+        "EnterpriseWS:2000", docIdPusherMock.docIds.get(0).getUniqueId());
   }
 
   @Test
@@ -287,19 +287,8 @@ public class OpentextAdaptorTest {
     adaptor.getDocIds(
         Proxies.newProxyInstance(DocIdPusher.class, docIdPusherMock));
     assertEquals(2, docIdPusherMock.docIds.size());
-    assertEquals("1001", docIdPusherMock.docIds.get(0).getUniqueId());
-    assertEquals("1003", docIdPusherMock.docIds.get(1).getUniqueId());
-  }
-
-  @Test
-  public void testGetPath() {
-    assertEquals(Lists.newArrayList("foo"),
-        OpentextAdaptor.getPath(new DocId("foo")));
-    assertEquals(Lists.newArrayList("foo", "bar", "baz"),
-        OpentextAdaptor.getPath(new DocId("foo/bar/baz")));
-    // Object names can contain slashes.
-    assertEquals(Lists.newArrayList("foo", "bar/baz"),
-        OpentextAdaptor.getPath(new DocId("foo/bar%2Fbaz")));
+    assertEquals("1001:1001", docIdPusherMock.docIds.get(0).getUniqueId());
+    assertEquals("1003:1003", docIdPusherMock.docIds.get(1).getUniqueId());
   }
 
   @Test
@@ -313,13 +302,14 @@ public class OpentextAdaptorTest {
 
     DocumentManagement documentManagement =
         soapFactory.newDocumentManagement("token");
-    Node node = adaptor.getNode(documentManagement, new DocId("EnterpriseWS"));
+    Node node = adaptor.getNode(documentManagement,
+        new OpentextDocId(new DocId("EnterpriseWS:2000")));
     assertNotNull(node);
     assertEquals(2000, node.getID());
     assertEquals("Enterprise Workspace", node.getName());
 
     assertNull(adaptor.getNode(documentManagement,
-            new DocId("InvalidStartPoint")));
+            new OpentextDocId(new DocId("InvalidStartPoint:1111"))));
   }
 
   @Test
@@ -338,11 +328,75 @@ public class OpentextAdaptorTest {
     testNode.setPath("folder 1", "folder 2", "Important Document");
     soapFactory.documentManagementMock.addNode(testNode);
 
-    Node node = adaptor.getNode(documentManagement,
-        new DocId("EnterpriseWS/folder+1/folder+2/Important+Document"));
+    DocId docId =
+        new DocId("EnterpriseWS/folder+1/folder+2/Important+Document:3214");
+    Node node = adaptor.getNode(documentManagement, new OpentextDocId(docId));
+
     assertNotNull("Couldn't find test node", node);
     assertEquals(3214, node.getID());
     assertEquals("Important Document", node.getName());
+  }
+
+  @Test
+  public void testGetNodePathWithVolume() throws InterruptedException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+
+    NodeMock projectNode = new NodeMock(3214, "Important Project");
+    projectNode.setStartPointId(2000);
+    projectNode.setParentID(2000);
+    projectNode.setPath("Important Project");
+    soapFactory.documentManagementMock.addNode(projectNode);
+
+    NodeMock folderInProjectNode = new NodeMock(4100, "Folder in Project");
+    folderInProjectNode.setStartPointId(2000);
+    folderInProjectNode.setParentID(-1 * projectNode.getID());
+    folderInProjectNode.setPath("Important Project", "Folder in Project");
+    soapFactory.documentManagementMock.addNode(folderInProjectNode);
+
+    NodeMock documentNode = new NodeMock(5100, "Document under Project");
+    documentNode.setStartPointId(2000);
+    documentNode.setParentID(folderInProjectNode.getID());
+    documentNode.setPath(
+        "Important Project", "Folder in Project", "Document under Project");
+    soapFactory.documentManagementMock.addNode(documentNode);
+
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.src", "EnterpriseWS," + projectNode.getID());
+    adaptor.init(context);
+
+    DocumentManagement documentManagement =
+        soapFactory.newDocumentManagement("token");
+
+    DocId docId = new DocId("EnterpriseWS/Important+Project/Folder+in+Project:"
+        + folderInProjectNode.getID());
+    Node node = adaptor.getNode(documentManagement, new OpentextDocId(docId));
+    assertNotNull("Couldn't find test node", node);
+    assertEquals(folderInProjectNode.getID(), node.getID());
+    assertEquals(folderInProjectNode.getName(), node.getName());
+
+    docId = new DocId("EnterpriseWS/Important+Project/Folder+in+Project/"
+        + "Document+under+Project:" + documentNode.getID());
+    node = adaptor.getNode(documentManagement, new OpentextDocId(docId));
+    assertNotNull("Couldn't find test node", node);
+    assertEquals(documentNode.getID(), node.getID());
+    assertEquals(documentNode.getName(), node.getName());
+
+    // Test nodes with the project as the start point.
+    docId = new DocId(projectNode.getID() + "/Folder+in+Project/"
+        + "Document+under+Project:" + documentNode.getID());
+    node = adaptor.getNode(documentManagement, new OpentextDocId(docId));
+    assertNotNull("Couldn't find test node", node);
+    assertEquals(documentNode.getID(), node.getID());
+    assertEquals(documentNode.getName(), node.getName());
+
+    docId = new DocId(projectNode.getID()
+        + "/Folder+in+Project:" + folderInProjectNode.getID());
+    node = adaptor.getNode(documentManagement, new OpentextDocId(docId));
+    assertNotNull("Couldn't find test node", node);
+    assertEquals(folderInProjectNode.getID(), node.getID());
+    assertEquals(folderInProjectNode.getName(), node.getName());
   }
 
   @Test
@@ -372,17 +426,18 @@ public class OpentextAdaptorTest {
 
     DocumentManagement documentManagement =
         soapFactory.newDocumentManagement("token");
-    adaptor.doContainer(documentManagement, new DocId("2000/Folder"),
+    adaptor.doContainer(documentManagement,
+        new OpentextDocId(new DocId("2000/Folder:3000")),
         containerNode, response);
 
     // I think the links don't get relativized because I'm not
     // creating anything with a scheme in the tests.
     String expected = "<!DOCTYPE html>\n"
-        + "<html><head><title>Folder 2000/Folder</title></head>"
-        + "<body><h1>Folder 2000/Folder</h1>"
-        + "<li><a href=\"2000/Folder/Document+1\">Document 1</a></li>"
-        + "<li><a href=\"2000/Folder/Document+2\">Document 2</a></li>"
-        + "<li><a href=\"2000/Folder/Document+3\">Document 3</a></li>"
+        + "<html><head><title>Folder 2000/Folder:3000</title></head>"
+        + "<body><h1>Folder 2000/Folder:3000</h1>"
+        + "<li><a href=\"2000/Folder/Document+1:4001\">Document 1</a></li>"
+        + "<li><a href=\"2000/Folder/Document+2:4002\">Document 2</a></li>"
+        + "<li><a href=\"2000/Folder/Document+3:4003\">Document 3</a></li>"
         + "</body></html>";
     assertEquals(expected,
         responseMock.outputStream.toString("UTF-8"));
@@ -422,7 +477,8 @@ public class OpentextAdaptorTest {
 
   @Test
   public void testDoDocumentNoVersions() throws IOException {
-    DocId testDocId = new DocId("2000/Document Name");
+    OpentextDocId testDocId =
+        new OpentextDocId(new DocId("2000/Document Name:3143"));
 
     thrown.expect(RuntimeException.class);
     thrown.expectMessage(
@@ -469,7 +525,8 @@ public class OpentextAdaptorTest {
 
     DocumentManagement documentManagement =
         soapFactory.newDocumentManagement("token");
-    adaptor.doDocument(documentManagement, new DocId("2000/Document"),
+    adaptor.doDocument(documentManagement,
+        new OpentextDocId(new DocId("2000/Document:3143")),
         documentNode, response);
 
     assertEquals("text/plain", responseMock.contentType);
@@ -672,6 +729,7 @@ public class OpentextAdaptorTest {
     private String name;
     private boolean isVersionable;
     private String objectType;
+    private long parentId;
 
     private List<String> path;
     private long startPointId;
@@ -711,6 +769,16 @@ public class OpentextAdaptorTest {
     @Override
     public String getType() {
       return this.objectType;
+    }
+
+    @Override
+    public void setParentID(long parentId) {
+      this.parentId = parentId;
+    }
+
+    @Override
+    public long getParentID() {
+      return this.parentId;
     }
 
     // For testing getNodeByPath
