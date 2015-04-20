@@ -27,6 +27,7 @@ import com.google.enterprise.adaptor.Config;
 import com.google.enterprise.adaptor.DocId;
 import com.google.enterprise.adaptor.DocIdPusher;
 import com.google.enterprise.adaptor.InvalidConfigurationException;
+import com.google.enterprise.adaptor.Request;
 import com.google.enterprise.adaptor.Response;
 
 import com.opentext.livelink.service.core.Authentication;
@@ -256,6 +257,33 @@ public class OpentextAdaptorTest {
         StartPoint.Type.NODE, "12", 12);
     assertStartPointEquals(startPoints.get(1),
         StartPoint.Type.VOLUME, "EnterpriseWS", -1);
+  }
+
+  @Test
+  public void testDefaultExcludedNodeTypes() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    List<String> excludedNodeTypes = adaptor.getExcludedNodeTypes();
+    assertEquals(2, excludedNodeTypes.size());
+    assertEquals(Lists.newArrayList("Alias", "URL"), excludedNodeTypes);
+  }
+
+  @Test
+  public void testGetExcludedNodeTypes() {
+    List<String> excludedNodeTypes =
+        OpentextAdaptor.getExcludedNodeTypes("Folder, 432", ",");
+    assertEquals(
+        Lists.newArrayList("Folder", "GenericNode:432"), excludedNodeTypes);
+  }
+
+  @Test
+  public void testEmptyExcludedNodeTypes() {
+    List<String> excludedNodeTypes =
+        OpentextAdaptor.getExcludedNodeTypes("", ",");
+    assertEquals(0, excludedNodeTypes.size());
   }
 
   @Test
@@ -536,6 +564,34 @@ public class OpentextAdaptorTest {
         responseMock.displayUrl.toString());
     assertEquals("this is the content",
         responseMock.outputStream.toString("UTF-8"));
+  }
+
+  @Test
+  public void testDocWithExcludedNodeType() throws IOException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+
+    NodeMock documentNode =
+        new NodeMock(3143, "Title of Document", "Alias");
+    documentNode.setStartPointId(2000);
+    documentNode.setPath(documentNode.getName());
+    soapFactory.documentManagementMock.addNode(documentNode);
+
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+
+    ResponseMock responseMock = new ResponseMock();
+    Response response = Proxies.newProxyInstance(Response.class,
+        responseMock);
+
+    RequestMock requestMock = new RequestMock(
+        new DocId("EnterpriseWS/Title+of+Document:3143"));
+    Request request = Proxies.newProxyInstance(Request.class,
+        requestMock);
+
+    adaptor.getDocContent(request, response);
+    assertTrue(responseMock.notFound());
   }
 
   private class SoapFactoryMock implements SoapFactory {
@@ -853,11 +909,24 @@ public class OpentextAdaptorTest {
     }
   }
 
+  private class RequestMock {
+    private DocId docId;
+
+    RequestMock(DocId docId) {
+      this.docId = docId;
+    }
+
+    public DocId getDocId() {
+      return this.docId;
+    }
+  }
+
   private class ResponseMock {
     private ByteArrayOutputStream outputStream;
     private String contentType;
     private Date lastModified;
     private URI displayUrl;
+    private boolean notFound = false;
 
     ResponseMock() {
       this.outputStream = new ByteArrayOutputStream();
@@ -877,6 +946,14 @@ public class OpentextAdaptorTest {
 
     public void setDisplayUrl(URI displayUrl) {
       this.displayUrl = displayUrl;
+    }
+
+    public void respondNotFound() {
+      this.notFound = true;
+    }
+
+    private boolean notFound() {
+      return this.notFound;
     }
   }
 

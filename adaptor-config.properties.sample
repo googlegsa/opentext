@@ -13,3 +13,16 @@ opentext.src.separator = ,
 
 # URL for Content Server: http://<host>[:<port>]/OTCS/livelink.exe
 opentext.displayUrl.contentServerUrl = <Content Server URL>
+
+# List of node types to exclude; no content will be sent for
+# these types. If the type is a container, its contents will not
+# be indexed. If a type is one of the following, you must specify
+# it using the name listed here: Alias, Category, CategoryFolder,
+# Channel, Collection, CompoundDoc, Discussion, Document,
+# EnterpriseWS, Folder, Generation, Milestone, News, PersonalWS,
+# Project, Reply, Report, Task, TaskGroup, TaskList, Topic, URL,
+# WFMap.
+#
+# Otherwise, you may use the Content Server numeric object type.
+opentext.excludedNodeTypes = URL, Alias, WFMap, 384
+opentext.excludedNodeTypes.separator = ,

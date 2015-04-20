@@ -87,6 +87,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
   private String contentServerUrl;
   private Map<String, String> queryStrings;
   private Map<String, String> objectActions;
+  private List<String> excludedNodeTypes;
 
   public OpentextAdaptor() {
     this(new SoapFactoryImpl());
@@ -109,6 +110,8 @@ public class OpentextAdaptor extends AbstractAdaptor {
         "?func=ll&objAction={0}&objId={1}");
     config.addKey("opentext.displayUrl.objAction.Document", "overview");
     config.addKey("opentext.displayUrl.objAction.default", "properties");
+    config.addKey("opentext.excludedNodeTypes", "Alias, URL");
+    config.addKey("opentext.excludedNodeTypes.separator", ",");
   }
 
   /**
@@ -190,6 +193,15 @@ public class OpentextAdaptor extends AbstractAdaptor {
         this.queryStrings);
     log.log(Level.CONFIG, "opentext.displayUrl.objAction: {0}",
         this.objectActions);
+
+    String excludedNodeTypes = config.getValue("opentext.excludedNodeTypes");
+    separator = config.getValue("opentext.excludedNodeTypes.separator");
+    log.log(Level.CONFIG,
+        "opentext.excludedNodeTypes: {0}", excludedNodeTypes);
+    log.log(Level.CONFIG,
+        "opentext.excludedNodeTypes.separator: {0}", separator);
+    this.excludedNodeTypes =
+        OpentextAdaptor.getExcludedNodeTypes(excludedNodeTypes, separator);
   }
 
   @Override
@@ -224,6 +236,13 @@ public class OpentextAdaptor extends AbstractAdaptor {
     Node node = getNode(documentManagement, opentextDocId);
     if (node == null) {
       log.log(Level.INFO, "Not found: {0}", opentextDocId);
+      resp.respondNotFound();
+      return;
+    }
+
+    if (this.excludedNodeTypes.contains(node.getType())) {
+      log.log(Level.FINER, "Item {0} is excluded by type: {1}",
+          new String[] { String.valueOf(node.getID()), node.getType() });
       resp.respondNotFound();
       return;
     }
@@ -596,5 +615,26 @@ public class OpentextAdaptor extends AbstractAdaptor {
           soapFaultException);
       return false;
     }
+  }
+
+  @VisibleForTesting
+  List<String> getExcludedNodeTypes() {
+    return this.excludedNodeTypes;
+  }
+
+  @VisibleForTesting
+  static List<String> getExcludedNodeTypes(String types, String separator) {
+    List<String> excludedNodeTypes = new ArrayList<String>();
+    Iterable<String> nodeTypes = Splitter.on(separator)
+        .trimResults().omitEmptyStrings().split(types);
+    for (String nodeType : nodeTypes) {
+      try {
+        Long.parseLong(nodeType);
+        excludedNodeTypes.add("GenericNode:" + nodeType);
+      } catch (NumberFormatException numberFormatException) {
+        excludedNodeTypes.add(nodeType);
+      }
+    }
+    return excludedNodeTypes;
   }
 }
