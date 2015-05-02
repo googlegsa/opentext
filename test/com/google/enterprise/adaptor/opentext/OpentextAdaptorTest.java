@@ -31,10 +31,25 @@ import com.google.enterprise.adaptor.Request;
 import com.google.enterprise.adaptor.Response;
 
 import com.opentext.livelink.service.core.Authentication;
+import com.opentext.livelink.service.core.BooleanValue;
 import com.opentext.livelink.service.core.ContentService;
+import com.opentext.livelink.service.core.IntegerValue;
+import com.opentext.livelink.service.core.PrimitiveValue;
+import com.opentext.livelink.service.core.RowValue;
+import com.opentext.livelink.service.core.StringValue;
+import com.opentext.livelink.service.core.TableValue;
+import com.opentext.livelink.service.docman.Attribute;
+import com.opentext.livelink.service.docman.AttributeGroup;
+import com.opentext.livelink.service.docman.AttributeGroupDefinition;
 import com.opentext.livelink.service.docman.DocumentManagement;
+import com.opentext.livelink.service.docman.Metadata;
 import com.opentext.livelink.service.docman.Node;
+import com.opentext.livelink.service.docman.PrimitiveAttribute;
+import com.opentext.livelink.service.docman.SetAttribute;
+import com.opentext.livelink.service.docman.UserAttribute;
 import com.opentext.livelink.service.docman.Version;
+import com.opentext.livelink.service.memberservice.Member;
+import com.opentext.livelink.service.memberservice.MemberService;
 
 import org.junit.Rule;
 import org.junit.Test;
@@ -51,7 +66,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.GregorianCalendar;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import javax.activation.DataHandler;
 import javax.activation.DataSource;
@@ -594,15 +611,394 @@ public class OpentextAdaptorTest {
     assertTrue(responseMock.notFound());
   }
 
+  @Test
+  public void testPrimitiveValueIndexAllAttributes() {
+    // Create the definition for the attribute.
+    Attribute attribute = new PrimitiveAttribute();
+    attribute.setKey("5432.1.2");
+    attribute.setSearchable(false);
+    Map<String, Attribute> attrDefinitionCache =
+        new HashMap<String, Attribute>();
+    attrDefinitionCache.put(attribute.getKey(), attribute);
+
+    // Create the test attribute.
+    StringValue stringValue = new StringValue();
+    stringValue.setDescription("attribute name");
+    stringValue.setKey("5432.1.2");
+    stringValue.getValues().add("first value");
+    stringValue.getValues().add("second value");
+    stringValue.getValues().add("third value");
+
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.indexSearchableAttributesOnly", "false");
+    adaptor.init(context);
+
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doPrimitiveValue(stringValue,
+        Proxies.newProxyInstance(Response.class, responseMock),
+        attrDefinitionCache, null);
+
+    Map<String, List<String>> metadata = responseMock.getMetadata();
+    List<String> values = metadata.get("attribute name");
+    assertNotNull(values);
+    assertEquals(
+        Lists.newArrayList("first value", "second value", "third value"),
+        values);
+  }
+
+  @Test
+  public void testPrimitiveValueIndexSearchableAttributes() {
+    // Create the definition for the attribute.
+    Attribute attribute = new Attribute();
+    attribute.setKey("5432.1.1");
+    attribute.setSearchable(false);
+    Map<String, Attribute> attrDefinitionCache =
+        new HashMap<String, Attribute>();
+    attrDefinitionCache.put(attribute.getKey(), attribute);
+
+    // Create the test attribute.
+    StringValue stringValue = new StringValue();
+    stringValue.setDescription("attribute name");
+    stringValue.setKey("5432.1.1");
+    stringValue.getValues().add("first value");
+    stringValue.getValues().add("second value");
+    stringValue.getValues().add("third value");
+
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.indexSearchableAttributesOnly", "true");
+    adaptor.init(context);
+
+    // When the attribute is not searchable, no metadata is returned.
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doPrimitiveValue(stringValue,
+        Proxies.newProxyInstance(Response.class, responseMock),
+        attrDefinitionCache, null);
+    Map<String, List<String>> metadata = responseMock.getMetadata();
+    List<String> values = metadata.get("attribute name");
+    assertNull(values);
+
+    // When the attribute is searchable, metadata is returned.
+    attribute.setSearchable(true);
+    responseMock = new ResponseMock();
+    adaptor.doPrimitiveValue(stringValue,
+        Proxies.newProxyInstance(Response.class, responseMock),
+        attrDefinitionCache, null);
+    metadata = responseMock.getMetadata();
+    values = metadata.get("attribute name");
+    assertNotNull(values);
+  }
+
+  @Test
+  public void testPrimitiveValueUserAttributes() {
+    // Create the definition for the attribute.
+    Attribute attribute = new UserAttribute();
+    attribute.setKey("5432.1.1");
+    attribute.setSearchable(true);
+    Map<String, Attribute> attrDefinitionCache =
+        new HashMap<String, Attribute>();
+    attrDefinitionCache.put(attribute.getKey(), attribute);
+
+    // Create the test attribute.
+    IntegerValue integerValue = new IntegerValue();
+    integerValue.setDescription("user attribute name");
+    integerValue.setKey("5432.1.1");
+    integerValue.getValues().add(new Long(14985));
+    // Include an id with no corresponding Member; API puts
+    // null in the member list when a member can't be found.
+    integerValue.getValues().add(new Long(14986));
+
+    // Create the corresponding member.
+    Member member = new Member();
+    member.setID(14985);
+    member.setName("testuser1");
+
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    ResponseMock responseMock = new ResponseMock();
+    soapFactory.memberServiceMock.addMember(member);
+    adaptor.doPrimitiveValue(integerValue,
+        Proxies.newProxyInstance(Response.class, responseMock),
+        attrDefinitionCache, soapFactory.newMemberService(null));
+
+    Map<String, List<String>> metadata = responseMock.getMetadata();
+    List<String> values = metadata.get("user attribute name");
+    assertNotNull(values);
+    assertEquals(Lists.newArrayList("testuser1"), values);
+  }
+
+  @Test
+  public void testTableValue() {
+    // Create the definition for the attributes.
+    Map<String, Attribute> attrDefinitionCache =
+        new HashMap<String, Attribute>();
+    SetAttribute setAttribute = new SetAttribute();
+    Attribute attribute = new PrimitiveAttribute();
+    attribute.setKey("5432.1.1");
+    attribute.setSearchable(true);
+    attrDefinitionCache.put(attribute.getKey(), attribute);
+    setAttribute.getAttributes().add(attribute);
+    attribute = new PrimitiveAttribute();
+    attribute.setKey("5432.1.2");
+    attribute.setSearchable(true);
+    attrDefinitionCache.put(attribute.getKey(), attribute);
+    setAttribute.getAttributes().add(attribute);
+
+    // Create the test attributes.
+    StringValue stringValue = new StringValue();
+    stringValue.setDescription("string attribute name");
+    stringValue.setKey("5432.1.1");
+    stringValue.getValues().add("first value");
+    stringValue.getValues().add("second value");
+    stringValue.getValues().add("third value");
+    BooleanValue booleanValue = new BooleanValue();
+    booleanValue.setDescription("boolean attribute name");
+    booleanValue.setKey("5432.1.2");
+    booleanValue.getValues().add(Boolean.TRUE);
+    RowValue rowValue = new RowValue();
+    rowValue.getValues().add(stringValue);
+    rowValue.getValues().add(booleanValue);
+    TableValue tableValue = new TableValue();
+    tableValue.getValues().add(rowValue);
+
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doTableValue(tableValue,
+        Proxies.newProxyInstance(Response.class, responseMock),
+        attrDefinitionCache, null);
+
+    Map<String, List<String>> metadata = responseMock.getMetadata();
+    List<String> values = metadata.get("string attribute name");
+    assertNotNull(values);
+    assertEquals(
+        Lists.newArrayList("first value", "second value", "third value"),
+        values);
+    values = metadata.get("boolean attribute name");
+    assertNotNull(values);
+    assertEquals(Lists.newArrayList("true"), values);
+  }
+
+  @Test
+  public void testDoCategories() {
+    // Create the definition for the category+attributes.
+    AttributeGroupDefinition categoryDefinition =
+        new AttributeGroupDefinition();
+    categoryDefinition.setID(5432);
+    categoryDefinition.setKey("5432.1");
+    PrimitiveAttribute attribute = new PrimitiveAttribute();
+    attribute.setKey("5432.1.1");
+    attribute.setSearchable(true);
+    categoryDefinition.getAttributes().add(attribute);
+    attribute = new PrimitiveAttribute();
+    attribute.setKey("5432.1.2");
+    attribute.setSearchable(true);
+    categoryDefinition.getAttributes().add(attribute);
+
+    // Create the test attributes (metadata).
+    StringValue stringValue = new StringValue();
+    stringValue.setDescription("string attribute name");
+    stringValue.setKey("5432.1.1");
+    stringValue.getValues().add("first value");
+    stringValue.getValues().add("second value");
+    stringValue.getValues().add("third value");
+    BooleanValue booleanValue = new BooleanValue();
+    booleanValue.setDescription("boolean attribute name");
+    booleanValue.setKey("5432.1.2");
+    booleanValue.getValues().add(Boolean.TRUE);
+    AttributeGroup attributeGroup = new AttributeGroup();
+    attributeGroup.setType("Category");
+    attributeGroup.setKey("5432.1");
+    attributeGroup.getValues().add(stringValue);
+    attributeGroup.getValues().add(booleanValue);
+    Metadata metadata = new Metadata();
+    metadata.getAttributeGroups().add(attributeGroup);
+
+    // Set up the adaptor instance with the test data.
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+
+    NodeMock documentNode =
+        new NodeMock(3143, "Title of Document", "Document");
+    documentNode.setMetadata(metadata);
+    soapFactory.documentManagementMock.addNode(documentNode);
+    soapFactory.documentManagementMock.addCategoryDefinition(
+        categoryDefinition);
+
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doCategories(soapFactory.newDocumentManagement("token"),
+        documentNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
+    Map<String, List<String>> responseMetadata = responseMock.getMetadata();
+    List<String> values = responseMetadata.get("string attribute name");
+    assertNotNull(values);
+    assertEquals(
+        Lists.newArrayList("first value", "second value", "third value"),
+        values);
+    values = responseMetadata.get("boolean attribute name");
+    assertNotNull(values);
+    assertEquals(Lists.newArrayList("true"), values);
+  }
+
+  @Test
+  public void testShouldIndexNonCategory() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+
+    AttributeGroup attributeGroup = new AttributeGroup();
+    attributeGroup.setType("NotACategory");
+    assertFalse(adaptor.shouldIndex(attributeGroup));
+  }
+
+  @Test
+  public void testShouldIndexNoCategoryId() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+
+    AttributeGroup attributeGroup = new AttributeGroup();
+    attributeGroup.setType("Category");
+    attributeGroup.setKey("random key");
+    assertFalse(adaptor.shouldIndex(attributeGroup));
+  }
+
+  @Test
+  public void testShouldIndexInIncludeList() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.includedCategories", "12345, 23456");
+    adaptor.init(context);
+
+    AttributeGroup attributeGroup = new AttributeGroup();
+    attributeGroup.setType("Category");
+    attributeGroup.setKey("12345.3");
+    assertTrue(adaptor.shouldIndex(attributeGroup));
+  }
+
+  @Test
+  public void testShouldIndexNotInIncludeList() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.includedCategories", "12345, 23456");
+    adaptor.init(context);
+
+    AttributeGroup attributeGroup = new AttributeGroup();
+    attributeGroup.setType("Category");
+    attributeGroup.setKey("92345.3");
+    assertFalse(adaptor.shouldIndex(attributeGroup));
+  }
+
+  @Test
+  public void testShouldIndexInExcludeList() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.excludedCategories", "12345, 23456");
+    adaptor.init(context);
+
+    AttributeGroup attributeGroup = new AttributeGroup();
+    attributeGroup.setType("Category");
+    attributeGroup.setKey("12345.3");
+    assertFalse(adaptor.shouldIndex(attributeGroup));
+  }
+
+  @Test
+  public void testShouldIndexNotInExcludeList() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.excludedCategories", "12345, 23456");
+    adaptor.init(context);
+
+    AttributeGroup attributeGroup = new AttributeGroup();
+    attributeGroup.setType("Category");
+    attributeGroup.setKey("82345.3");
+    assertTrue(adaptor.shouldIndex(attributeGroup));
+  }
+
+  @Test
+  public void testShouldIndexInBothIncludeAndExcludeList() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.includedCategories", "12345, 23456");
+    config.overrideKey("opentext.excludedCategories", "12345, 23456");
+    adaptor.init(context);
+
+    AttributeGroup attributeGroup = new AttributeGroup();
+    attributeGroup.setType("Category");
+    attributeGroup.setKey("12345.3");
+    assertFalse(adaptor.shouldIndex(attributeGroup));
+  }
+
+  @Test
+  public void testIncludeCategoryName() {
+    AttributeGroupDefinition categoryDefinition =
+        new AttributeGroupDefinition();
+    categoryDefinition.setID(82345);
+    categoryDefinition.setKey("82345.3");
+
+    AttributeGroup attributeGroup = new AttributeGroup();
+    attributeGroup.setType("Category");
+    attributeGroup.setKey("82345.3");
+    attributeGroup.setDisplayName("Category Display Name");
+    Metadata metadata = new Metadata();
+    metadata.getAttributeGroups().add(attributeGroup);
+
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.indexCategoryNames", "true");
+    adaptor.init(context);
+
+    NodeMock documentNode =
+        new NodeMock(3143, "Title of Document", "Document");
+    documentNode.setMetadata(metadata);
+    soapFactory.documentManagementMock.addNode(documentNode);
+    soapFactory.documentManagementMock.addCategoryDefinition(
+        categoryDefinition);
+
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doCategories(soapFactory.newDocumentManagement("token"),
+        documentNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
+    Map<String, List<String>> responseMetadata = responseMock.getMetadata();
+    assertEquals(
+        "Category Display Name", responseMetadata.get("Category").get(0));
+  }
+
   private class SoapFactoryMock implements SoapFactory {
     private AuthenticationMock authenticationMock;
     private DocumentManagementMock documentManagementMock;
     private ContentServiceMock contentServiceMock;
+    private MemberServiceMock memberServiceMock;
 
     private SoapFactoryMock() {
       this.authenticationMock = new AuthenticationMock();
       this.documentManagementMock = new DocumentManagementMock();
       this.contentServiceMock = new ContentServiceMock();
+      this.memberServiceMock = new MemberServiceMock();
     }
 
     @Override
@@ -623,6 +1019,13 @@ public class OpentextAdaptorTest {
         DocumentManagement documentManagement) {
       return Proxies.newProxyInstance(ContentService.class,
           this.contentServiceMock);
+    }
+
+    @Override
+    public MemberService newMemberService(
+        DocumentManagement documentManagement) {
+      return Proxies.newProxyInstance(MemberService.class,
+          this.memberServiceMock);
     }
 
     @Override
@@ -685,6 +1088,7 @@ public class OpentextAdaptorTest {
 
   private class DocumentManagementMock {
     List<NodeMock> nodes = new ArrayList<NodeMock>();
+    List<AttributeGroupDefinition> categoryDefinitions;
 
     DocumentManagementMock() {
       this.nodes.add(new NodeMock(2000, "Enterprise Workspace"));
@@ -703,6 +1107,15 @@ public class OpentextAdaptorTest {
         }
       }
       return null;
+    }
+
+    private void addCategoryDefinition(
+        AttributeGroupDefinition categoryDefinition) {
+      if (this.categoryDefinitions == null) {
+        this.categoryDefinitions =
+            new ArrayList<AttributeGroupDefinition>();
+      }
+      this.categoryDefinitions.add(categoryDefinition);
     }
 
     public Node getNode(long nodeId) {
@@ -753,6 +1166,16 @@ public class OpentextAdaptorTest {
     public String getVersionContentsContext(long nodeId, long versionNumber) {
       return "versioncontext";
     }
+
+    public AttributeGroupDefinition getAttributeGroupDefinition(
+        String type, String key) {
+      for (AttributeGroupDefinition categoryDef : this.categoryDefinitions) {
+        if (key.equals(categoryDef.getKey())) {
+          return categoryDef;
+        }
+      }
+      return null;
+    }
   }
 
   private class ContentServiceMock {
@@ -780,12 +1203,35 @@ public class OpentextAdaptorTest {
     }
   }
 
+  private class MemberServiceMock {
+    private List<Member> members = new ArrayList<Member>();
+
+    private void addMember(Member member) {
+      this.members.add(member);
+    }
+
+    public List<Member> getMembersByID(List<Long> idList) {
+      List<Member> memberList = new ArrayList<Member>();
+      for (Long id : idList) {
+        for (Member member : this.members) {
+          if (member.getID() == id) {
+            memberList.add(member);
+          } else {
+            memberList.add(null);
+          }
+        }
+      }
+      return memberList;
+    }
+  }
+
   private class NodeMock extends Node {
     private long id;
     private String name;
     private boolean isVersionable;
     private String objectType;
     private long parentId;
+    private Metadata metadata;
 
     private List<String> path;
     private long startPointId;
@@ -835,6 +1281,16 @@ public class OpentextAdaptorTest {
     @Override
     public long getParentID() {
       return this.parentId;
+    }
+
+    @Override
+    public Metadata getMetadata() {
+      return this.metadata;
+    }
+
+    @Override
+    public void setMetadata(Metadata metadata) {
+      this.metadata = metadata;
     }
 
     // For testing getNodeByPath
@@ -927,6 +1383,8 @@ public class OpentextAdaptorTest {
     private Date lastModified;
     private URI displayUrl;
     private boolean notFound = false;
+    private Map<String, List<String>> metadata =
+        new HashMap<String, List<String>>();
 
     ResponseMock() {
       this.outputStream = new ByteArrayOutputStream();
@@ -952,8 +1410,21 @@ public class OpentextAdaptorTest {
       this.notFound = true;
     }
 
+    public void addMetadata(String name, String value) {
+      List<String> values = this.metadata.get(name);
+      if (values == null) {
+        values = new ArrayList<String>();
+        this.metadata.put(name, values);
+      }
+      values.add(value);
+    }
+
     private boolean notFound() {
       return this.notFound;
+    }
+
+    private Map<String, List<String>> getMetadata() {
+      return this.metadata;
     }
   }
 

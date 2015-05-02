@@ -159,6 +159,15 @@ lib/plexi submodule or add the the command line argument
         <include name="ContentService-3.xsd"/>
       </fileset>
     </copy>
+    <wsimport service="MemberService"/>
+    <copy todir="${build-generate.dir}/com/opentext/livelink/service/memberservice/">
+      <fileset dir=".">
+        <include name="MemberService.wsdl"/>
+        <include name="MemberService-1.xsd"/>
+        <include name="MemberService-2.xsd"/>
+        <include name="MemberService-3.xsd"/>
+      </fileset>
+    </copy>
   </target>
 
   <target name="-real-build" depends="-plexi-build,-generate">

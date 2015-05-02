@@ -16,6 +16,7 @@ package com.google.enterprise.adaptor.opentext;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Splitter;
+import com.google.common.collect.Lists;
 import com.google.enterprise.adaptor.AbstractAdaptor;
 import com.google.enterprise.adaptor.AdaptorContext;
 import com.google.enterprise.adaptor.Config;
@@ -28,14 +29,33 @@ import com.google.enterprise.adaptor.Response;
 
 import com.opentext.livelink.service.core.Authentication;
 import com.opentext.livelink.service.core.Authentication_Service;
+import com.opentext.livelink.service.core.BooleanValue;
 import com.opentext.livelink.service.core.ContentService;
 import com.opentext.livelink.service.core.ContentService_Service;
+import com.opentext.livelink.service.core.DataValue;
+import com.opentext.livelink.service.core.DateValue;
+import com.opentext.livelink.service.core.IntegerValue;
+import com.opentext.livelink.service.core.PrimitiveValue;
+import com.opentext.livelink.service.core.RealValue;
+import com.opentext.livelink.service.core.RowValue;
+import com.opentext.livelink.service.core.StringValue;
+import com.opentext.livelink.service.core.TableValue;
+import com.opentext.livelink.service.docman.Attribute;
+import com.opentext.livelink.service.docman.AttributeGroup;
+import com.opentext.livelink.service.docman.AttributeGroupDefinition;
 import com.opentext.livelink.service.docman.DocumentManagement;
 import com.opentext.livelink.service.docman.DocumentManagement_Service;
 import com.opentext.livelink.service.docman.GetNodesInContainerOptions;
+import com.opentext.livelink.service.docman.Metadata;
 import com.opentext.livelink.service.docman.Node;
 import com.opentext.livelink.service.docman.NodeVersionInfo;
+import com.opentext.livelink.service.docman.PrimitiveAttribute;
+import com.opentext.livelink.service.docman.SetAttribute;
+import com.opentext.livelink.service.docman.UserAttribute;
 import com.opentext.livelink.service.docman.Version;
+import com.opentext.livelink.service.memberservice.Member;
+import com.opentext.livelink.service.memberservice.MemberService;
+import com.opentext.livelink.service.memberservice.MemberService_Service;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -51,10 +71,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.SortedMap;
+import java.util.SortedSet;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -88,6 +111,23 @@ public class OpentextAdaptor extends AbstractAdaptor {
   private Map<String, String> queryStrings;
   private Map<String, String> objectActions;
   private List<String> excludedNodeTypes;
+  private boolean indexCategories;
+  private boolean indexCategoryNames;
+  private boolean indexSearchableAttributesOnly;
+  private List<String> includedCategories;
+  private List<String> excludedCategories;
+
+  // Look up attributes by key
+  private SortedMap<String, Attribute> attributeDefinitions =
+      Collections.synchronizedSortedMap(new TreeMap<String, Attribute>());
+  // Look up category definitions by key
+  private SortedMap<String, AttributeGroupDefinition> categoryDefinitions =
+      Collections.synchronizedSortedMap(
+          new TreeMap<String, AttributeGroupDefinition>());
+  // Category keys
+  private SortedSet<String> categoriesWithUserAttributes =
+      Collections.synchronizedSortedSet(new TreeSet<String>());
+
 
   public OpentextAdaptor() {
     this(new SoapFactoryImpl());
@@ -112,6 +152,13 @@ public class OpentextAdaptor extends AbstractAdaptor {
     config.addKey("opentext.displayUrl.objAction.default", "properties");
     config.addKey("opentext.excludedNodeTypes", "Alias, URL");
     config.addKey("opentext.excludedNodeTypes.separator", ",");
+    config.addKey("opentext.indexCategories", "true");
+    config.addKey("opentext.indexCategoryNames", "true");
+    config.addKey("opentext.indexSearchableAttributesOnly", "true");
+    config.addKey("opentext.includedCategories", "");
+    config.addKey("opentext.includedCategories.separator", ",");
+    config.addKey("opentext.excludedCategories", "");
+    config.addKey("opentext.excludedCategories.separator", ",");
   }
 
   /**
@@ -202,6 +249,54 @@ public class OpentextAdaptor extends AbstractAdaptor {
         "opentext.excludedNodeTypes.separator: {0}", separator);
     this.excludedNodeTypes =
         OpentextAdaptor.getExcludedNodeTypes(excludedNodeTypes, separator);
+
+    String indexCategories = config.getValue("opentext.indexCategories");
+    log.log(Level.CONFIG, "opentext.indexCategories: {0}", indexCategories);
+    this.indexCategories = Boolean.parseBoolean(indexCategories);
+
+    if (this.indexCategories) {
+      String indexCategoryNames =
+          config.getValue("opentext.indexCategoryNames");
+      log.log(Level.CONFIG,
+          "opentext.indexCategoryNames: {0}", indexCategoryNames);
+      this.indexCategoryNames = Boolean.parseBoolean(indexCategoryNames);
+
+      String indexSearchableAttributesOnly =
+          config.getValue("opentext.indexSearchableAttributesOnly");
+      log.log(Level.CONFIG,
+          "opentext.indexSearchableAttributesOnly: {0}",
+          indexSearchableAttributesOnly);
+      this.indexSearchableAttributesOnly =
+          Boolean.parseBoolean(indexSearchableAttributesOnly);
+
+      String includedCategories =
+          config.getValue("opentext.includedCategories");
+      separator = config.getValue("opentext.includedCategories.separator");
+      log.log(Level.CONFIG,
+          "opentext.includedCategories: {0}", includedCategories);
+      log.log(Level.CONFIG,
+          "opentext.includedCategories.separator: {0}", separator);
+      this.includedCategories = Lists.newArrayList(
+          Splitter.on(separator).trimResults().omitEmptyStrings()
+          .split(includedCategories));
+      if (this.includedCategories.isEmpty()) {
+        this.includedCategories = null;
+      }
+
+      String excludedCategories =
+          config.getValue("opentext.excludedCategories");
+      separator = config.getValue("opentext.excludedCategories.separator");
+      log.log(Level.CONFIG,
+          "opentext.excludedCategories: {0}", excludedCategories);
+      log.log(Level.CONFIG,
+          "opentext.excludedCategories.separator: {0}", separator);
+      this.excludedCategories = Lists.newArrayList(
+          Splitter.on(separator).trimResults().omitEmptyStrings()
+          .split(excludedCategories));
+      if (this.excludedCategories.isEmpty()) {
+        this.excludedCategories = null;
+      }
+    }
   }
 
   @Override
@@ -249,9 +344,11 @@ public class OpentextAdaptor extends AbstractAdaptor {
 
     if (node.isIsContainer()) {
       // TODO: restrict the types of containers we handle.
+      doCategories(documentManagement, node, resp);
       doContainer(documentManagement, opentextDocId, node, resp);
     } else {
       if ("Document".equals(node.getType())) {
+        doCategories(documentManagement, node, resp);
         doDocument(documentManagement, opentextDocId, node, resp);
       } else {
         // TODO: other types.
@@ -467,10 +564,210 @@ public class OpentextAdaptor extends AbstractAdaptor {
   }
 
   @VisibleForTesting
+  void doCategories(DocumentManagement documentManagement, Node node,
+      Response response) {
+    if (!this.indexCategories) {
+      return;
+    }
+    Metadata metadata = node.getMetadata();
+    if (metadata == null) {
+      return;
+    }
+    List<AttributeGroup> attributeGroups = metadata.getAttributeGroups();
+    if (attributeGroups == null) {
+      return;
+    }
+
+    for (AttributeGroup attributeGroup : attributeGroups) {
+      if (!shouldIndex(attributeGroup)) {
+        continue;
+      }
+      cacheCategoryDefinition(attributeGroup, documentManagement);
+      // Check to see if we'll need to do user lookups.
+      MemberService memberService = null;
+      if (this.categoriesWithUserAttributes
+          .contains(attributeGroup.getKey())) {
+        memberService = this.soapFactory.newMemberService(documentManagement);
+      }
+      if (this.indexCategoryNames && attributeGroup.getDisplayName() != null) {
+        response.addMetadata("Category", attributeGroup.getDisplayName());
+      }
+      List<DataValue> dataValues = attributeGroup.getValues();
+      for (DataValue dataValue : dataValues) {
+        if (dataValue instanceof PrimitiveValue) {
+          doPrimitiveValue(
+              (PrimitiveValue) dataValue, response,
+              this.attributeDefinitions, memberService);
+        } else if (dataValue instanceof RowValue) {
+          doRowValue((RowValue) dataValue, response,
+              this.attributeDefinitions, memberService);
+        } else if (dataValue instanceof TableValue) {
+          doTableValue((TableValue) dataValue, response,
+              this.attributeDefinitions, memberService);
+        }
+      }
+    }
+  }
+
+  @VisibleForTesting
+  boolean shouldIndex(AttributeGroup attributeGroup) {
+    if (!"Category".equals(attributeGroup.getType())) {
+      log.log(Level.FINEST, "Skipping non-Category metadata type {0}",
+          attributeGroup.getType());
+      return false;
+    }
+    int index = attributeGroup.getKey().indexOf(".");
+    if (index == -1) {
+      log.log(Level.FINE,
+          "Unable to get category id for " + attributeGroup.getDisplayName()
+          + " from key " + attributeGroup.getKey());
+      return false;
+    }
+    String categoryId = attributeGroup.getKey().substring(0, index);
+    if (((this.includedCategories != null) &&
+            !this.includedCategories.contains(categoryId)) ||
+        ((this.excludedCategories != null) &&
+            this.excludedCategories.contains(categoryId))) {
+      return false;
+    }
+    return true;
+  }
+
+  @VisibleForTesting
+  void cacheCategoryDefinition(
+      AttributeGroup attributeGroup, DocumentManagement documentManagement) {
+    AttributeGroupDefinition categoryDefinition =
+        this.categoryDefinitions.get(attributeGroup.getKey());
+    if (categoryDefinition == null) {
+      // Look up definition and cache attribute data if we
+      // haven't seen this category before.
+      categoryDefinition = documentManagement.getAttributeGroupDefinition(
+          attributeGroup.getType(), attributeGroup.getKey());
+      this.categoryDefinitions.put(
+          attributeGroup.getKey(), categoryDefinition);
+      List<Attribute> attributes = categoryDefinition.getAttributes();
+      for (Attribute attribute : attributes) {
+        if (attribute instanceof PrimitiveAttribute) {
+          this.attributeDefinitions.put(attribute.getKey(), attribute);
+          if (attribute instanceof UserAttribute) {
+            this.categoriesWithUserAttributes
+                .add(categoryDefinition.getKey());
+          }
+        } else if (attribute instanceof SetAttribute) {
+          List<Attribute> setAttributes =
+              ((SetAttribute) attribute).getAttributes();
+          for (Attribute setAttribute : setAttributes) {
+            if (setAttribute instanceof PrimitiveAttribute)
+              this.attributeDefinitions.put(
+                  setAttribute.getKey(), setAttribute);
+            if (attribute instanceof UserAttribute) {
+              this.categoriesWithUserAttributes
+                  .add(categoryDefinition.getKey());
+            }
+          }
+        }
+      }
+    }
+  }
+
+  @VisibleForTesting
+  void doTableValue(TableValue tableValue, Response response,
+      Map<String, Attribute> attributeDefinitions,
+      MemberService memberService) {
+    List<RowValue> rowValues = tableValue.getValues();
+    for (RowValue value : rowValues) {
+      doRowValue(value, response, attributeDefinitions, memberService);
+    }
+  }
+
+  private void doRowValue(RowValue rowValue, Response response,
+      Map<String, Attribute> attributeDefinitions,
+      MemberService memberService) {
+    List<DataValue> values = rowValue.getValues();
+    for (DataValue value : values) {
+      if (value instanceof PrimitiveValue) {
+        doPrimitiveValue((PrimitiveValue) value, response,
+             attributeDefinitions, memberService);
+      }
+      // Nested attribute sets (tables, rows) are not supported.
+    }
+  }
+
+  /* PrimitiveValue's subclasses are BooleanValue, DateValue,
+   * IntegerValue, RealValue, StringValue; each can have multiple
+   * values. PrimitiveValue does not have a getValues method;
+   * only the subclasses do.
+   */
+  @VisibleForTesting
+  void doPrimitiveValue(PrimitiveValue primitiveValue, Response response,
+      Map<String, Attribute> attributeDefinitions,
+      MemberService memberService) {
+
+    String name = primitiveValue.getDescription();
+    if (name == null) {
+      log.log(Level.FINEST,
+          "No name for attribute {0}; skipping", primitiveValue.getKey());
+      return;
+    }
+
+    boolean isUserAttribute = false;
+    boolean isSearchable = false;
+    Attribute attribute = attributeDefinitions.get(primitiveValue.getKey());
+    if (attribute != null) {
+      isUserAttribute = (attribute instanceof UserAttribute);
+      isSearchable = attribute.isSearchable();
+    }
+    if (this.indexSearchableAttributesOnly && !isSearchable) {
+      return;
+    }
+
+    List<? extends Object> values = null;
+    if (primitiveValue instanceof StringValue) {
+      values = ((StringValue) primitiveValue).getValues();
+    } else if (primitiveValue instanceof BooleanValue) {
+      values = ((BooleanValue) primitiveValue).getValues();
+    } else if (primitiveValue instanceof DateValue) {
+      values = ((DateValue) primitiveValue).getValues();
+    } else if (primitiveValue instanceof RealValue) {
+      values = ((RealValue) primitiveValue).getValues();
+    } else if (primitiveValue instanceof IntegerValue) {
+      // IntegerValue's enclosed type is Long.
+      if (isUserAttribute && memberService != null) {
+        try {
+          List<Member> members = memberService.getMembersByID(
+              ((IntegerValue) primitiveValue).getValues());
+          List<String> usernames = new ArrayList<String>(members.size());
+          for (Member member : members) {
+            if (member != null && member.getName() != null) {
+              usernames.add(member.getName());
+            }
+          }
+          values = usernames;
+        } catch (SOAPFaultException soapFaultException) {
+          log.log(Level.FINER,
+              "Failed to look up member names for attribute " + name,
+              soapFaultException);
+        }
+      } else {
+        values = ((IntegerValue) primitiveValue).getValues();
+      }
+    }
+
+    if (values != null) {
+      for (Object value : values) {
+        if (value != null) {
+          response.addMetadata(name, value.toString());
+        }
+      }
+    }
+  }
+
+  @VisibleForTesting
   interface SoapFactory {
     Authentication newAuthentication();
     DocumentManagement newDocumentManagement(String authenticationToken);
     ContentService newContentService(DocumentManagement documentManagement);
+    MemberService newMemberService(DocumentManagement documentManagement);
     void configure(Config config);
   }
 
@@ -479,6 +776,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
     private final Authentication_Service authenticationService;
     private final DocumentManagement_Service documentManagementService;
     private final ContentService_Service contentServiceService;
+    private final MemberService_Service memberServiceService;
     private String webServicesUrl;
 
     SoapFactoryImpl() {
@@ -490,6 +788,9 @@ public class OpentextAdaptor extends AbstractAdaptor {
       this.contentServiceService = new ContentService_Service(
           ContentService_Service.class.getResource(
               "ContentService.wsdl"));
+      this.memberServiceService = new MemberService_Service(
+          MemberService_Service.class.getResource(
+              "MemberService.wsdl"));
     }
 
     @VisibleForTesting
@@ -539,6 +840,21 @@ public class OpentextAdaptor extends AbstractAdaptor {
           getAuthenticationToken((BindingProvider) documentManagement));
 
       return contentServicePort;
+    }
+
+    @Override
+    public MemberService newMemberService(
+        DocumentManagement documentManagement) {
+      MemberService memberServicePort =
+          memberServiceService.getBasicHttpBindingMemberService();
+
+      setEndpointAddress(
+          (BindingProvider) memberServicePort, "MemberService");
+      setAuthenticationHandler(
+          (BindingProvider) memberServicePort,
+          getAuthenticationToken((BindingProvider) documentManagement));
+
+      return memberServicePort;
     }
 
     private void setEndpointAddress(BindingProvider bindingProvider,
