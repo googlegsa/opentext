@@ -26,3 +26,9 @@ opentext.displayUrl.contentServerUrl = <Content Server URL>
 # Otherwise, you may use the Content Server numeric object type.
 opentext.excludedNodeTypes = URL, Alias, WFMap, 384
 opentext.excludedNodeTypes.separator = ,
+
+
+# List of node features to be included. Use the same rules for
+# specifying node types as listed above for excludedNodeTypes.
+opentext.includedNodeFeatures.Project = Mission,Goals,Objectives,Initiatives
+opentext.includedNodeFeatures.separator = ,

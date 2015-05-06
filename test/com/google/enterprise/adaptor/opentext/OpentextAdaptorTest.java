@@ -44,6 +44,7 @@ import com.opentext.livelink.service.docman.AttributeGroupDefinition;
 import com.opentext.livelink.service.docman.DocumentManagement;
 import com.opentext.livelink.service.docman.Metadata;
 import com.opentext.livelink.service.docman.Node;
+import com.opentext.livelink.service.docman.NodeFeature;
 import com.opentext.livelink.service.docman.PrimitiveAttribute;
 import com.opentext.livelink.service.docman.SetAttribute;
 import com.opentext.livelink.service.docman.UserAttribute;
@@ -986,6 +987,66 @@ public class OpentextAdaptorTest {
     Map<String, List<String>> responseMetadata = responseMock.getMetadata();
     assertEquals(
         "Category Display Name", responseMetadata.get("Category").get(0));
+  }
+
+  @Test
+  public void testGetIncludedNodeFeatures() {
+    Map<String, String> configuredFeatures = new HashMap<String, String>();
+    configuredFeatures.put("NamedType", "Feature1, Feature2");
+    configuredFeatures.put("124", "OtherFeature");
+
+    Map<String, List<String>> includedFeatures =
+        OpentextAdaptor.getIncludedNodeFeatures(configuredFeatures, ",");
+    assertEquals(2, includedFeatures.size());
+    assertEquals(Lists.newArrayList("Feature1", "Feature2"),
+        includedFeatures.get("NamedType"));
+    assertEquals(Lists.newArrayList("OtherFeature"),
+        includedFeatures.get("GenericNode:124"));
+  }
+
+  @Test
+  public void testGetIncludedNodeFeaturesEmpty() {
+    Map<String, String> configuredFeatures = new HashMap<String, String>();
+
+    Map<String, List<String>> includedFeatures =
+        OpentextAdaptor.getIncludedNodeFeatures(configuredFeatures, ",");
+    assertEquals(0, includedFeatures.size());
+  }
+
+  @Test
+  public void testGetCanonicalType() {
+    assertNull(OpentextAdaptor.getCanonicalType(null));
+    assertEquals("TextType", OpentextAdaptor.getCanonicalType("TextType"));
+    assertEquals("GenericNode:123",
+        OpentextAdaptor.getCanonicalType("123"));
+    assertEquals("GenericNode:123",
+        OpentextAdaptor.getCanonicalType("GenericNode:123"));
+  }
+
+  @Test
+  public void testDoNodeFeatures() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.addKey("opentext.includedNodeFeatures.NodeType",
+        "Feature1,Feature2");
+    adaptor.init(context);
+
+    NodeMock node = new NodeMock(3143, "Node Name", "NodeType");
+    NodeFeature feature = new NodeFeature();
+    feature.setName("Feature1");
+    feature.setBooleanValue(true);
+    feature.setType("Boolean");
+    node.getFeatures().add(feature);
+
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doNodeFeatures(
+        node, Proxies.newProxyInstance(Response.class, responseMock));
+    Map<String, List<String>> responseMetadata = responseMock.getMetadata();
+    assertEquals(1, responseMetadata.size());
+    assertEquals("true", responseMetadata.get("Feature1").get(0));
+    assertNull(responseMetadata.get("Feature2"));
   }
 
   private class SoapFactoryMock implements SoapFactory {

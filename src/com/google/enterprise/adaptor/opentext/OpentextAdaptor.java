@@ -48,6 +48,7 @@ import com.opentext.livelink.service.docman.DocumentManagement_Service;
 import com.opentext.livelink.service.docman.GetNodesInContainerOptions;
 import com.opentext.livelink.service.docman.Metadata;
 import com.opentext.livelink.service.docman.Node;
+import com.opentext.livelink.service.docman.NodeFeature;
 import com.opentext.livelink.service.docman.NodeVersionInfo;
 import com.opentext.livelink.service.docman.PrimitiveAttribute;
 import com.opentext.livelink.service.docman.SetAttribute;
@@ -71,6 +72,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -127,7 +129,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
   // Category keys
   private SortedSet<String> categoriesWithUserAttributes =
       Collections.synchronizedSortedSet(new TreeSet<String>());
-
+  private Map<String, List<String>> includedNodeFeatures;
 
   public OpentextAdaptor() {
     this(new SoapFactoryImpl());
@@ -159,6 +161,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
     config.addKey("opentext.includedCategories.separator", ",");
     config.addKey("opentext.excludedCategories", "");
     config.addKey("opentext.excludedCategories.separator", ",");
+    config.addKey("opentext.includedNodeFeatures.separator", ",");
   }
 
   /**
@@ -297,6 +300,16 @@ public class OpentextAdaptor extends AbstractAdaptor {
         this.excludedCategories = null;
       }
     }
+
+    Map<String, String> includedNodeFeatures =
+        config.getValuesWithPrefix("opentext.includedNodeFeatures.");
+    separator = config.getValue("opentext.includedNodeFeatures.separator");
+    log.log(Level.CONFIG,
+        "opentext.includedNodeFeatures: {0}", includedNodeFeatures);
+    log.log(Level.CONFIG,
+        "opentext.includedNodeFeatures.separator: {0}", separator);
+    this.includedNodeFeatures = OpentextAdaptor.getIncludedNodeFeatures(
+        includedNodeFeatures, separator);
   }
 
   @Override
@@ -345,10 +358,12 @@ public class OpentextAdaptor extends AbstractAdaptor {
     if (node.isIsContainer()) {
       // TODO: restrict the types of containers we handle.
       doCategories(documentManagement, node, resp);
+      doNodeFeatures(node, resp);
       doContainer(documentManagement, opentextDocId, node, resp);
     } else {
       if ("Document".equals(node.getType())) {
         doCategories(documentManagement, node, resp);
+        doNodeFeatures(node, resp);
         doDocument(documentManagement, opentextDocId, node, resp);
       } else {
         // TODO: other types.
@@ -762,6 +777,67 @@ public class OpentextAdaptor extends AbstractAdaptor {
     }
   }
 
+  void doNodeFeatures(Node node, Response response) {
+    List<NodeFeature> features = node.getFeatures();
+    if (features == null || features.size() == 0) {
+      return;
+    }
+    List<String> includedFeatures =
+        this.includedNodeFeatures.get(node.getType());
+    if (includedFeatures == null) {
+      // NodeFeatures to index must be explicitly configured.
+      // TODO: we're not logging this case for every node
+      // encountered; in future, try to log a message once for
+      // each type with NodeFeatures that aren't being indexed.
+      return;
+    }
+
+    for (NodeFeature feature : features) {
+      String name = feature.getName();
+      if (name == null) {
+        continue;
+      }
+      if (!includedFeatures.contains(name)) {
+        continue;
+      }
+      String value = null;
+      switch (feature.getType()) {
+        case "String":
+          value = feature.getStringValue();
+          break;
+        case "Integer":
+          if (feature.getIntegerValue() != null) {
+            value = feature.getIntegerValue().toString();
+          }
+          break;
+        case "Long":
+          if (feature.getLongValue() != null) {
+            value = feature.getLongValue().toString();
+          }
+          break;
+        case "Date":
+          if (feature.getDateValue() != null) {
+            value = feature.getDateValue().toString();
+          }
+          break;
+        case "Boolean":
+          // The getter for boolean features really is "isBooleanValue".
+          if (feature.isBooleanValue() != null) {
+            value = feature.isBooleanValue().toString();
+          }
+          break;
+        default:
+          log.log(Level.FINEST,
+              "Unknown feature type " + feature.getType()
+              + " in NodeFeature " + name
+              + " for object " + node.getID());
+      }
+      if (value != null) {
+        response.addMetadata(name, value);
+      }
+    }
+  }
+
   @VisibleForTesting
   interface SoapFactory {
     Authentication newAuthentication();
@@ -944,13 +1020,35 @@ public class OpentextAdaptor extends AbstractAdaptor {
     Iterable<String> nodeTypes = Splitter.on(separator)
         .trimResults().omitEmptyStrings().split(types);
     for (String nodeType : nodeTypes) {
-      try {
-        Long.parseLong(nodeType);
-        excludedNodeTypes.add("GenericNode:" + nodeType);
-      } catch (NumberFormatException numberFormatException) {
-        excludedNodeTypes.add(nodeType);
-      }
+      excludedNodeTypes.add(OpentextAdaptor.getCanonicalType(nodeType));
     }
     return excludedNodeTypes;
+  }
+
+  @VisibleForTesting
+  static Map<String, List<String>> getIncludedNodeFeatures(
+      Map<String, String> includedFeatures, String separator) {
+
+    Map<String, List<String>> result = new HashMap<String, List<String>>();
+    for (Map.Entry<String, String> entry : includedFeatures.entrySet()) {
+      String key = OpentextAdaptor.getCanonicalType(entry.getKey());
+      List<String> values = Lists.newArrayList(Splitter.on(separator)
+          .trimResults().omitEmptyStrings().split(entry.getValue()));
+      result.put(key, values);
+    }
+    return result;
+  }
+
+  @VisibleForTesting
+  static String getCanonicalType(String nodeType) {
+    if (nodeType == null) {
+      return null;
+    }
+    try {
+      Long.parseLong(nodeType);
+      return "GenericNode:" + nodeType;
+    } catch (NumberFormatException numberFormatException) {
+      return nodeType;
+    }
   }
 }
