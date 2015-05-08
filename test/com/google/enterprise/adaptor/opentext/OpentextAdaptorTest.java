@@ -33,6 +33,7 @@ import com.google.enterprise.adaptor.Response;
 import com.opentext.livelink.service.core.Authentication;
 import com.opentext.livelink.service.core.BooleanValue;
 import com.opentext.livelink.service.core.ContentService;
+import com.opentext.livelink.service.core.DateValue;
 import com.opentext.livelink.service.core.IntegerValue;
 import com.opentext.livelink.service.core.PrimitiveValue;
 import com.opentext.livelink.service.core.RowValue;
@@ -45,6 +46,7 @@ import com.opentext.livelink.service.docman.DocumentManagement;
 import com.opentext.livelink.service.docman.Metadata;
 import com.opentext.livelink.service.docman.Node;
 import com.opentext.livelink.service.docman.NodeFeature;
+import com.opentext.livelink.service.docman.NodeVersionInfo;
 import com.opentext.livelink.service.docman.PrimitiveAttribute;
 import com.opentext.livelink.service.docman.SetAttribute;
 import com.opentext.livelink.service.docman.UserAttribute;
@@ -734,6 +736,39 @@ public class OpentextAdaptorTest {
   }
 
   @Test
+  public void testPrimitiveValueDateAttributes() {
+    // Create the definition for the attribute.
+    Attribute attribute = new UserAttribute();
+    attribute.setKey("5432.1.1");
+    attribute.setSearchable(true);
+    Map<String, Attribute> attrDefinitionCache =
+        new HashMap<String, Attribute>();
+    attrDefinitionCache.put(attribute.getKey(), attribute);
+
+    // Create the test attribute.
+    DateValue dateValue = new DateValue();
+    dateValue.setDescription("date attribute name");
+    dateValue.setKey("5432.1.1");
+    dateValue.getValues().add(
+        getXmlGregorianCalendar(1998, 11, 12, 14, 15, 16));
+
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doPrimitiveValue(dateValue,
+        Proxies.newProxyInstance(Response.class, responseMock),
+        attrDefinitionCache, soapFactory.newMemberService(null));
+
+    Map<String, List<String>> metadata = responseMock.getMetadata();
+    List<String> values = metadata.get("date attribute name");
+    assertNotNull(values);
+    assertEquals(Lists.newArrayList("1998-12-12"), values);
+  }
+
+  @Test
   public void testTableValue() {
     // Create the definition for the attributes.
     Map<String, Attribute> attrDefinitionCache =
@@ -1049,6 +1084,96 @@ public class OpentextAdaptorTest {
     assertNull(responseMetadata.get("Feature2"));
   }
 
+  @Test
+  public void testDoNodeFeaturesWithDate() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.addKey("opentext.includedNodeFeatures.NodeType",
+        "Feature1,Feature2");
+    adaptor.init(context);
+
+    NodeMock node = new NodeMock(3143, "Node Name", "NodeType");
+    NodeFeature feature = new NodeFeature();
+    feature.setName("Feature1");
+    feature.setDateValue(getXmlGregorianCalendar(2011, 01, 01, 01, 01, 01));
+    feature.setType("Date");
+    node.getFeatures().add(feature);
+
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doNodeFeatures(
+        node, Proxies.newProxyInstance(Response.class, responseMock));
+    Map<String, List<String>> responseMetadata = responseMock.getMetadata();
+    assertEquals(1, responseMetadata.size());
+    assertEquals("2011-02-01", responseMetadata.get("Feature1").get(0));
+    assertNull(responseMetadata.get("Feature2"));
+  }
+
+  @Test
+  public void testDoNodeProperties() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    Member member = new Member();
+    member.setID(14985);
+    member.setName("testuser1");
+    soapFactory.memberServiceMock.addMember(member);
+
+    NodeMock node = new NodeMock(54678, "Node Name");
+    node.setComment("Node comment");
+    node.setCreateDate(2012, 3, 1, 4, 34, 21);
+    node.setModifyDate(2013, 3, 1, 4, 34, 21);
+    node.setCreatedBy(new Long(14985));
+    node.setType("NodeType");
+    node.setDisplayType("Node Display Type");
+    node.setVolumeID(new Long(-321));
+    NodeVersionInfo versionInfo = new NodeVersionInfo();
+    versionInfo.setMimeType("test/mime-type");
+    node.setVersionInfo(versionInfo);
+
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doNodeProperties(soapFactory.newDocumentManagement("token"),
+        node, Proxies.newProxyInstance(Response.class, responseMock));
+    Map<String, List<String>> responseMetadata = responseMock.getMetadata();
+
+    assertEquals("54678", responseMetadata.get("ID").get(0));
+    assertEquals("Node Name", responseMetadata.get("Name").get(0));
+    assertEquals("Node comment", responseMetadata.get("Comment").get(0));
+    assertEquals("2012-04-01", responseMetadata.get("CreateDate").get(0));
+    assertEquals("2013-04-01", responseMetadata.get("ModifyDate").get(0));
+    assertEquals("testuser1", responseMetadata.get("CreatedBy").get(0));
+    assertEquals("NodeType", responseMetadata.get("SubType").get(0));
+    assertEquals(
+        "Node Display Type", responseMetadata.get("DisplayType").get(0));
+    assertEquals("-321", responseMetadata.get("VolumeID").get(0));
+    assertEquals("test/mime-type", responseMetadata.get("MimeType").get(0));
+  }
+
+  @Test
+  public void testDoNodePropertiesCustomDateFormat() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.metadataDateFormat", "MM dd, yyyy");
+    adaptor.init(context);
+
+    NodeMock node = new NodeMock(54678, "Node Name", "NodeType");
+    node.setCreateDate(2012, 3, 1, 4, 34, 21);
+    node.setModifyDate(2013, 3, 1, 4, 34, 21);
+
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doNodeProperties(soapFactory.newDocumentManagement("token"),
+        node, Proxies.newProxyInstance(Response.class, responseMock));
+    Map<String, List<String>> responseMetadata = responseMock.getMetadata();
+
+    assertEquals("04 01, 2012", responseMetadata.get("CreateDate").get(0));
+    assertEquals("04 01, 2013", responseMetadata.get("ModifyDate").get(0));
+  }
+
   private class SoapFactoryMock implements SoapFactory {
     private AuthenticationMock authenticationMock;
     private DocumentManagementMock documentManagementMock;
@@ -1271,6 +1396,15 @@ public class OpentextAdaptorTest {
       this.members.add(member);
     }
 
+    public Member getMemberById(long id) {
+      for (Member member : this.members) {
+        if (member.getID() == id) {
+          return member;
+        }
+      }
+      return null;
+    }
+
     public List<Member> getMembersByID(List<Long> idList) {
       List<Member> memberList = new ArrayList<Member>();
       for (Long id : idList) {
@@ -1293,6 +1427,9 @@ public class OpentextAdaptorTest {
     private String objectType;
     private long parentId;
     private Metadata metadata;
+    private XMLGregorianCalendar modifyDate;
+    private XMLGregorianCalendar createDate;
+    private NodeVersionInfo nodeVersionInfo;
 
     private List<String> path;
     private long startPointId;
@@ -1335,6 +1472,11 @@ public class OpentextAdaptorTest {
     }
 
     @Override
+    public void setType(String objectType) {
+      this.objectType = objectType;
+    }
+
+    @Override
     public void setParentID(long parentId) {
       this.parentId = parentId;
     }
@@ -1352,6 +1494,26 @@ public class OpentextAdaptorTest {
     @Override
     public void setMetadata(Metadata metadata) {
       this.metadata = metadata;
+    }
+
+    @Override
+    public XMLGregorianCalendar getModifyDate() {
+      return this.modifyDate;
+    }
+
+    @Override
+    public XMLGregorianCalendar getCreateDate() {
+      return this.createDate;
+    }
+
+    @Override
+    public NodeVersionInfo getVersionInfo() {
+      return this.nodeVersionInfo;
+    }
+
+    @Override
+    public void setVersionInfo(NodeVersionInfo nodeVersionInfo) {
+      this.nodeVersionInfo = nodeVersionInfo;
     }
 
     // For testing getNodeByPath
@@ -1380,6 +1542,18 @@ public class OpentextAdaptorTest {
         GregorianCalendar modifyDate) {
       this.version
           = new VersionMock(versionNumber, contentType, modifyDate);
+    }
+
+    private void setModifyDate(int year, int month, int dayOfMonth,
+        int hourOfDay, int minute, int second) {
+      this.modifyDate = getXmlGregorianCalendar(
+          year, month, dayOfMonth, hourOfDay, minute, second);
+    }
+
+    private void setCreateDate(int year, int month, int dayOfMonth,
+        int hourOfDay, int minute, int second) {
+      this.createDate = getXmlGregorianCalendar(
+          year, month, dayOfMonth, hourOfDay, minute, second);
     }
 
     public String toString() {
@@ -1507,5 +1681,17 @@ public class OpentextAdaptorTest {
     config.overrideKey("opentext.displayUrl.contentServerUrl",
         "http://example.com/otcs/livelink.exe");
     return config;
+  }
+
+  private XMLGregorianCalendar getXmlGregorianCalendar(
+      int year, int month, int dayOfMonth,
+      int hourOfDay, int minute, int second) {
+    GregorianCalendar calendar = new GregorianCalendar(
+        year, month, dayOfMonth, hourOfDay, minute, second);
+    try {
+      return DatatypeFactory.newInstance().newXMLGregorianCalendar(calendar);
+    } catch (DatatypeConfigurationException datatypeException) {
+      return null;
+    }
   }
 }

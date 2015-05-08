@@ -16,6 +16,7 @@ package com.google.enterprise.adaptor.opentext;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Splitter;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.enterprise.adaptor.AbstractAdaptor;
 import com.google.enterprise.adaptor.AdaptorContext;
@@ -68,6 +69,7 @@ import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.Charset;
 import java.text.MessageFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -130,6 +132,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
   private SortedSet<String> categoriesWithUserAttributes =
       Collections.synchronizedSortedSet(new TreeSet<String>());
   private Map<String, List<String>> includedNodeFeatures;
+  private ThreadLocal<SimpleDateFormat> metadataDateFormatter;
 
   public OpentextAdaptor() {
     this(new SoapFactoryImpl());
@@ -162,6 +165,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
     config.addKey("opentext.excludedCategories", "");
     config.addKey("opentext.excludedCategories.separator", ",");
     config.addKey("opentext.includedNodeFeatures.separator", ",");
+    config.addKey("opentext.metadataDateFormat", "yyyy-MM-dd");
   }
 
   /**
@@ -310,6 +314,18 @@ public class OpentextAdaptor extends AbstractAdaptor {
         "opentext.includedNodeFeatures.separator: {0}", separator);
     this.includedNodeFeatures = OpentextAdaptor.getIncludedNodeFeatures(
         includedNodeFeatures, separator);
+
+    final String metadataDateFormat =
+        config.getValue("opentext.metadataDateFormat");
+    log.log(Level.CONFIG,
+        "opentext.metadataDateFormat: {0}", metadataDateFormat);
+    this.metadataDateFormatter =
+      new ThreadLocal<SimpleDateFormat>() {
+          @Override
+          protected SimpleDateFormat initialValue() {
+              return new SimpleDateFormat(metadataDateFormat);
+          }
+      };
   }
 
   @Override
@@ -359,11 +375,15 @@ public class OpentextAdaptor extends AbstractAdaptor {
       // TODO: restrict the types of containers we handle.
       doCategories(documentManagement, node, resp);
       doNodeFeatures(node, resp);
+      doNodeProperties(documentManagement, node, resp);
+
       doContainer(documentManagement, opentextDocId, node, resp);
     } else {
       if ("Document".equals(node.getType())) {
         doCategories(documentManagement, node, resp);
         doNodeFeatures(node, resp);
+        doNodeProperties(documentManagement, node, resp);
+
         doDocument(documentManagement, opentextDocId, node, resp);
       } else {
         // TODO: other types.
@@ -741,10 +761,18 @@ public class OpentextAdaptor extends AbstractAdaptor {
       values = ((StringValue) primitiveValue).getValues();
     } else if (primitiveValue instanceof BooleanValue) {
       values = ((BooleanValue) primitiveValue).getValues();
-    } else if (primitiveValue instanceof DateValue) {
-      values = ((DateValue) primitiveValue).getValues();
     } else if (primitiveValue instanceof RealValue) {
       values = ((RealValue) primitiveValue).getValues();
+    } else if (primitiveValue instanceof DateValue) {
+      List<XMLGregorianCalendar> dateValues =
+          ((DateValue) primitiveValue).getValues();
+      List<String> dateStrings = new ArrayList<String>(dateValues.size());
+      for (XMLGregorianCalendar xmlCalendar : dateValues) {
+        if (xmlCalendar != null) {
+          dateStrings.add(getDateAsString(xmlCalendar));
+        }
+      }
+      values = dateStrings;
     } else if (primitiveValue instanceof IntegerValue) {
       // IntegerValue's enclosed type is Long.
       if (isUserAttribute && memberService != null) {
@@ -817,7 +845,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
           break;
         case "Date":
           if (feature.getDateValue() != null) {
-            value = feature.getDateValue().toString();
+            value = getDateAsString(feature.getDateValue());
           }
           break;
         case "Boolean":
@@ -836,6 +864,71 @@ public class OpentextAdaptor extends AbstractAdaptor {
         response.addMetadata(name, value);
       }
     }
+  }
+
+  /* Names for metadata are taken from the Livelink Connector. */
+  @VisibleForTesting
+  void doNodeProperties(DocumentManagement documentManagement,
+      Node node, Response response) {
+
+    response.addMetadata("ID", String.valueOf(node.getID()));
+
+    String name = node.getName();
+    if (!Strings.isNullOrEmpty(name)) {
+      response.addMetadata("Name", name);
+    }
+
+    String comment = node.getComment();
+    if (!Strings.isNullOrEmpty(comment)) {
+      response.addMetadata("Comment", comment);
+    }
+
+    XMLGregorianCalendar xmlCalendar = node.getCreateDate();
+    if (xmlCalendar != null) {
+      response.addMetadata("CreateDate", getDateAsString(xmlCalendar));
+    }
+    xmlCalendar = node.getModifyDate();
+    if (xmlCalendar != null) {
+      response.addMetadata("ModifyDate", getDateAsString(xmlCalendar));
+    }
+
+    if (node.getCreatedBy() != null) {
+      MemberService memberService =
+          this.soapFactory.newMemberService(documentManagement);
+      try {
+        Member member = memberService.getMemberById(node.getCreatedBy());
+        if (member.getName() != null) {
+          response.addMetadata("CreatedBy", member.getName());
+        }
+      } catch (SOAPFaultException soapFaultException) {
+        log.log(Level.FINE,
+            "Failed to look up node creator for " + node.getID(),
+            soapFaultException);
+      }
+    }
+
+    response.addMetadata("SubType", node.getType());
+    String displayType = node.getDisplayType();
+    if (!Strings.isNullOrEmpty(displayType)) {
+      response.addMetadata("DisplayType", displayType);
+    }
+
+    response.addMetadata("VolumeID", String.valueOf(node.getVolumeID()));
+
+    if (node.isIsVersionable()) {
+      NodeVersionInfo versionInfo = node.getVersionInfo();
+      if (versionInfo != null) {
+        String mimeType = versionInfo.getMimeType();
+        if (!Strings.isNullOrEmpty(mimeType)) {
+          response.addMetadata("MimeType", mimeType);
+        }
+      }
+    }
+  }
+
+  private String getDateAsString(XMLGregorianCalendar xmlCalendar) {
+    return this.metadataDateFormatter.get().format(
+        xmlCalendar.toGregorianCalendar().getTime());
   }
 
   @VisibleForTesting
