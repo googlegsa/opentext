@@ -24,11 +24,42 @@ opentext.displayUrl.contentServerUrl = <Content Server URL>
 # WFMap.
 #
 # Otherwise, you may use the Content Server numeric object type.
-opentext.excludedNodeTypes = URL, Alias, WFMap, 384
+opentext.excludedNodeTypes = WFMap, 384
 opentext.excludedNodeTypes.separator = ,
-
 
 # List of node features to be included. Use the same rules for
 # specifying node types as listed above for excludedNodeTypes.
-opentext.includedNodeFeatures.Project = Mission,Goals,Objectives,Initiatives
-opentext.includedNodeFeatures.separator = ,
+opentext.includedNodeFeatures.URL = Location
+
+# Actions for object types. The default when no action is
+# configured is "properties". Use the same rules for specifying
+# node types as listed above for excludedNodeTypes.
+# 146 = CustomView
+# 218 = Poll
+# 384 = Prospector
+# 480 = Appearance
+# 483 = Appearance Workspace Folder
+# 899 = Virtual Folder
+opentext.displayUrl.objAction.146 = properties
+opentext.displayUrl.objAction.218 = OpenPoll
+opentext.displayUrl.objAction.384 = ProspectorBrowse
+opentext.displayUrl.objAction.480 = overview
+opentext.displayUrl.objAction.483 = browse
+opentext.displayUrl.objAction.899 = browse
+opentext.displayUrl.objAction.Alias = properties
+opentext.displayUrl.objAction.Category = properties
+opentext.displayUrl.objAction.Channel = ViewChannel
+opentext.displayUrl.objAction.Collection = browse
+opentext.displayUrl.objAction.CompoundDoc = browse
+opentext.displayUrl.objAction.Discussion = view
+opentext.displayUrl.objAction.EnterpriseWS = browse
+opentext.displayUrl.objAction.Folder = browse
+opentext.displayUrl.objAction.Generation = open
+opentext.displayUrl.objAction.Milestone = BrowseMilestone
+opentext.displayUrl.objAction.News = ViewNews
+opentext.displayUrl.objAction.Project = browse
+opentext.displayUrl.objAction.Reply = view
+opentext.displayUrl.objAction.Task = BrowseTask
+opentext.displayUrl.objAction.TaskGroup = BrowseTaskGroup
+opentext.displayUrl.objAction.TaskList = BrowseTaskList
+opentext.displayUrl.objAction.Topic = view

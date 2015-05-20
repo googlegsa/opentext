@@ -1,0 +1,861 @@
+<?xml version='1.0' encoding='UTF-8'?><!-- Published by JAX-WS RI at http://jax-ws.dev.java.net. RI's version is JAX-WS RI 2.2.7-b01  svn-revision#${svn.Last.Changed.Rev}. --><xs:schema xmlns:tns="urn:Collaboration.service.livelink.opentext.com" xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified" targetNamespace="urn:Collaboration.service.livelink.opentext.com">
+  <xs:import schemaLocation="Collaboration-2.xsd" namespace="urn:DocMan.service.livelink.opentext.com"/>
+  <xs:import schemaLocation="Collaboration-4.xsd" namespace="urn:Core.service.livelink.opentext.com"/>
+  <xs:import schemaLocation="Collaboration-5.xsd" namespace="urn:MemberService.service.livelink.opentext.com"/>
+  <xs:element name="UpdateMilestone">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="milestoneInfo" type="tns:MilestoneInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="MilestoneInfo">
+    <xs:complexContent mixed="false">
+      <xs:extension base="tns:TaskListItem">
+        <xs:sequence>
+          <xs:element minOccurs="1" maxOccurs="1" name="ActualDate" nillable="true" type="xs:dateTime"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="Duration" type="xs:int"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="NumActive" type="xs:int"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="NumCancelled" type="xs:int"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="NumCompleted" type="xs:int"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="NumInprocess" type="xs:int"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="NumIssue" type="xs:int"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="NumLate" type="xs:int"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="NumOnHold" type="xs:int"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="NumPending" type="xs:int"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="NumTasks" type="xs:int"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="OriginalTargetDate" nillable="true" type="xs:dateTime"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="PercentCancelled" type="xs:double"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="PercentComplete" type="xs:double"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="PercentInprocess" type="xs:double"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="PercentIssue" type="xs:double"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="PercentLate" type="xs:double"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="PercentOnHold" type="xs:double"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="PercentPending" type="xs:double"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="Resources" type="xs:int"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="TargetDate" nillable="true" type="xs:dateTime"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="TaskListItem">
+    <xs:complexContent mixed="false">
+      <xs:extension base="tns:ServiceDataObject">
+        <xs:sequence>
+          <xs:element minOccurs="1" maxOccurs="1" name="ID" type="xs:long"/>
+          <xs:element minOccurs="0" maxOccurs="1" name="Name" type="xs:string"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="ParentID" type="xs:long"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="ServiceDataObject" abstract="true"/>
+  <xs:complexType name="TaskGroupInfo">
+    <xs:complexContent mixed="false">
+      <xs:extension base="tns:TaskListItem">
+        <xs:sequence>
+          <xs:element minOccurs="1" maxOccurs="1" name="DefaultMilestone" type="xs:long"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="TaskInfo">
+    <xs:complexContent mixed="false">
+      <xs:extension base="tns:TaskListItem">
+        <xs:sequence>
+          <xs:element minOccurs="1" maxOccurs="1" name="AcceptorOnly" type="xs:boolean"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="AssignedTo" type="xs:long"/>
+          <xs:element minOccurs="0" maxOccurs="1" name="Comments" type="xs:string"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="CompletionDate" nillable="true" type="xs:dateTime"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="DateAssigned" nillable="true" type="xs:dateTime"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="DueDate" nillable="true" type="xs:dateTime"/>
+          <xs:element minOccurs="0" maxOccurs="1" name="Instructions" type="xs:string"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="Milestone" type="xs:long"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="Priority" type="tns:TaskPriority"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="StartDate" nillable="true" type="xs:dateTime"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="Status" type="tns:TaskStatus"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:simpleType name="TaskPriority">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="HIGH"/>
+      <xs:enumeration value="LOW"/>
+      <xs:enumeration value="MEDIUM"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="TaskStatus">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="CANCELLED"/>
+      <xs:enumeration value="COMPLETED"/>
+      <xs:enumeration value="INPROCESS"/>
+      <xs:enumeration value="ISSUE"/>
+      <xs:enumeration value="ONHOLD"/>
+      <xs:enumeration value="PENDING"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="UpdateMilestoneResponse">
+    <xs:complexType/>
+  </xs:element>
+  <xs:element name="UpdateNews">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="newsInfo" type="tns:NewsInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="NewsInfo">
+    <xs:complexContent mixed="false">
+      <xs:extension base="tns:ServiceDataObject">
+        <xs:sequence>
+          <xs:element minOccurs="0" maxOccurs="unbounded" name="Attachments" type="tns:NewsAttachment"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="CreatedBy" nillable="true" type="xs:long"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="EffectiveDate" nillable="true" type="xs:dateTime"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="ExpirationDate" nillable="true" type="xs:dateTime"/>
+          <xs:element minOccurs="0" maxOccurs="1" name="Headline" type="xs:string"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="ID" type="xs:long"/>
+          <xs:element minOccurs="0" maxOccurs="1" name="Name" type="xs:string"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="ParentID" type="xs:long"/>
+          <xs:element minOccurs="0" maxOccurs="1" name="Story" type="xs:string"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="NewsAttachment">
+    <xs:complexContent mixed="false">
+      <xs:extension base="tns:CollaborationAttachment"/>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="CollaborationAttachment">
+    <xs:complexContent mixed="false">
+      <xs:extension base="tns:ServiceDataObject">
+        <xs:sequence>
+          <xs:element minOccurs="1" maxOccurs="1" name="CreateDate" type="xs:dateTime"/>
+          <xs:element minOccurs="0" maxOccurs="1" name="FileType" type="xs:string"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="ID" type="xs:long"/>
+          <xs:element minOccurs="0" maxOccurs="1" name="Mimetype" type="xs:string"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="ModifyDate" type="xs:dateTime"/>
+          <xs:element minOccurs="0" maxOccurs="1" name="Name" type="xs:string"/>
+          <xs:element minOccurs="0" maxOccurs="1" name="OwnerName" type="xs:string"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="Size" type="xs:long"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="UserID" type="xs:long"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="TopicAttachment">
+    <xs:complexContent mixed="false">
+      <xs:extension base="tns:CollaborationAttachment"/>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="UpdateNewsResponse">
+    <xs:complexType/>
+  </xs:element>
+  <xs:element name="UpdateProject">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="projectInfo" type="tns:ProjectInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="ProjectInfo">
+    <xs:complexContent mixed="false">
+      <xs:extension base="tns:ServiceDataObject">
+        <xs:sequence>
+          <xs:element minOccurs="1" maxOccurs="1" name="CreatedBy" nillable="true" type="xs:long"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="Goals" nillable="true" type="xs:string"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="ID" type="xs:long"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="Initiatives" nillable="true" type="xs:string"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="Mission" nillable="true" type="xs:string"/>
+          <xs:element minOccurs="0" maxOccurs="1" name="Name" type="xs:string"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="Objectives" nillable="true" type="xs:string"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="ParentID" type="xs:long"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="PublicAccess" type="xs:boolean"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="StartDate" nillable="true" type="xs:dateTime"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="Status" type="tns:ProjectStatus"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="TargetDate" nillable="true" type="xs:dateTime"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:simpleType name="ProjectStatus">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="CAUTION"/>
+      <xs:enumeration value="CRITICAL"/>
+      <xs:enumeration value="ONTARGET"/>
+      <xs:enumeration value="PENDING"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="UpdateProjectResponse">
+    <xs:complexType/>
+  </xs:element>
+  <xs:element name="UpdateProjectParticipants">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="1" maxOccurs="1" name="projectID" type="xs:long"/>
+        <xs:element minOccurs="0" maxOccurs="unbounded" name="roleUpdateInfo" nillable="true" type="tns:ProjectRoleUpdateInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="ProjectRoleUpdateInfo">
+    <xs:complexContent mixed="false">
+      <xs:extension base="tns:ServiceDataObject">
+        <xs:sequence>
+          <xs:element minOccurs="1" maxOccurs="1" name="Role" type="tns:ProjectRole"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="RoleAction" type="tns:ProjectRoleAction"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="UserID" type="xs:long"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:simpleType name="ProjectRole">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="COORDINATOR"/>
+      <xs:enumeration value="GUEST"/>
+      <xs:enumeration value="MEMBER"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ProjectRoleAction">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="ASSIGN"/>
+      <xs:enumeration value="REMOVE"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="UpdateProjectParticipantsResponse">
+    <xs:complexType/>
+  </xs:element>
+  <xs:element name="UpdateTask">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="taskInfo" type="tns:TaskInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="UpdateTaskResponse">
+    <xs:complexType/>
+  </xs:element>
+  <xs:element name="UpdateTaskGroup">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="taskGroupInfo" type="tns:TaskGroupInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="UpdateTaskGroupResponse">
+    <xs:complexType/>
+  </xs:element>
+  <xs:element name="CreateChannel">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="channelInfo" type="tns:ChannelInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="ChannelInfo">
+    <xs:complexContent mixed="false">
+      <xs:extension base="tns:ServiceDataObject">
+        <xs:sequence>
+          <xs:element minOccurs="1" maxOccurs="1" name="CreatedBy" nillable="true" type="xs:long"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="ID" type="xs:long"/>
+          <xs:element minOccurs="0" maxOccurs="1" name="Name" type="xs:string"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="ParentID" type="xs:long"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="CreateChannelResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element xmlns:q1="urn:DocMan.service.livelink.opentext.com" minOccurs="0" maxOccurs="1" name="CreateChannelResult" type="q1:Node"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="CreateDiscussion">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="discussionInfo" type="tns:DiscussionInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="DiscussionInfo">
+    <xs:complexContent mixed="false">
+      <xs:extension base="tns:ServiceDataObject">
+        <xs:sequence>
+          <xs:element minOccurs="1" maxOccurs="1" name="CreatedBy" nillable="true" type="xs:long"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="ID" type="xs:long"/>
+          <xs:element minOccurs="0" maxOccurs="1" name="Name" type="xs:string"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="ParentID" type="xs:long"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="CreateDiscussionResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element xmlns:q2="urn:DocMan.service.livelink.opentext.com" minOccurs="0" maxOccurs="1" name="CreateDiscussionResult" type="q2:Node"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="CreateMilestone">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="milestoneInfo" type="tns:MilestoneInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="CreateMilestoneResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element xmlns:q3="urn:DocMan.service.livelink.opentext.com" minOccurs="0" maxOccurs="1" name="CreateMilestoneResult" type="q3:Node"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="CreateNews">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="newsInfo" type="tns:NewsInfo"/>
+        <xs:element minOccurs="1" maxOccurs="1" name="livelinkAttachment" nillable="true" type="xs:long"/>
+        <xs:element xmlns:q4="urn:Core.service.livelink.opentext.com" minOccurs="0" maxOccurs="1" name="attach" type="q4:Attachment"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="CreateNewsResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element xmlns:q5="urn:DocMan.service.livelink.opentext.com" minOccurs="0" maxOccurs="1" name="CreateNewsResult" type="q5:Node"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="CreateProject">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="projectInfo" type="tns:ProjectInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="CreateProjectResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element xmlns:q6="urn:DocMan.service.livelink.opentext.com" minOccurs="0" maxOccurs="1" name="CreateProjectResult" type="q6:Node"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="CreateTask">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="taskInfo" type="tns:TaskInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="CreateTaskResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element xmlns:q7="urn:DocMan.service.livelink.opentext.com" minOccurs="0" maxOccurs="1" name="CreateTaskResult" type="q7:Node"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="CreateTaskGroup">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="taskGroupInfo" type="tns:TaskGroupInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="CreateTaskGroupResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element xmlns:q8="urn:DocMan.service.livelink.opentext.com" minOccurs="0" maxOccurs="1" name="CreateTaskGroupResult" type="q8:Node"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="CreateTaskList">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="taskListInfo" type="tns:TaskListInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="TaskListInfo">
+    <xs:complexContent mixed="false">
+      <xs:extension base="tns:ServiceDataObject">
+        <xs:sequence>
+          <xs:element minOccurs="1" maxOccurs="1" name="CreatedBy" type="xs:long"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="ID" type="xs:long"/>
+          <xs:element minOccurs="0" maxOccurs="1" name="Name" type="xs:string"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="ParentID" type="xs:long"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="CreateTaskListResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element xmlns:q9="urn:DocMan.service.livelink.opentext.com" minOccurs="0" maxOccurs="1" name="CreateTaskListResult" type="q9:Node"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetChannel">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="1" maxOccurs="1" name="channelID" type="xs:long"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetChannelResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="GetChannelResult" type="tns:ChannelInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetDiscussion">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="1" maxOccurs="1" name="discussionID" type="xs:long"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetDiscussionResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="GetDiscussionResult" type="tns:DiscussionInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetMilestone">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="1" maxOccurs="1" name="milestoneID" type="xs:long"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetMilestoneResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="GetMilestoneResult" type="tns:MilestoneInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetMyAssignments">
+    <xs:complexType/>
+  </xs:element>
+  <xs:element name="GetMyAssignmentsResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="unbounded" name="GetMyAssignmentsResult" nillable="true" type="tns:Assignment"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="Assignment">
+    <xs:complexContent mixed="false">
+      <xs:extension base="tns:ServiceDataObject">
+        <xs:sequence>
+          <xs:element minOccurs="1" maxOccurs="1" name="CreatedBy" nillable="true" type="xs:long"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="CreatedByName" nillable="true" type="xs:string"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="DateAssigned" nillable="true" type="xs:dateTime"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="DateDue" nillable="true" type="xs:dateTime"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="DateDueColor" nillable="true" type="xs:string"/>
+          <xs:element minOccurs="0" maxOccurs="1" name="KeySig" type="xs:string"/>
+          <xs:element minOccurs="0" maxOccurs="1" name="Name" type="xs:string"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="Priority" nillable="true" type="xs:int"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="PriorityColor" nillable="true" type="xs:string"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="PriorityString" nillable="true" type="xs:string"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="Status" nillable="true" type="xs:int"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="StatusColor" nillable="true" type="xs:string"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="StatusString" nillable="true" type="xs:string"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="SubType" type="xs:int"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="GetMyChannels">
+    <xs:complexType/>
+  </xs:element>
+  <xs:element name="GetMyChannelsResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="unbounded" name="GetMyChannelsResult" nillable="true" type="tns:ChannelInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetMyDiscussions">
+    <xs:complexType/>
+  </xs:element>
+  <xs:element name="GetMyDiscussionsResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="unbounded" name="GetMyDiscussionsResult" nillable="true" type="tns:DiscussionInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetMyProjects">
+    <xs:complexType/>
+  </xs:element>
+  <xs:element name="GetMyProjectsResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="unbounded" name="GetMyProjectsResult" nillable="true" type="tns:ProjectInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetMyTaskLists">
+    <xs:complexType/>
+  </xs:element>
+  <xs:element name="GetMyTaskListsResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="unbounded" name="GetMyTaskListsResult" nillable="true" type="tns:TaskListInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetNews">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="1" maxOccurs="1" name="newsID" type="xs:long"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetNewsResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="GetNewsResult" type="tns:NewsInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetParticipants">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="1" maxOccurs="1" name="projectID" type="xs:long"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetParticipantsResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="GetParticipantsResult" type="tns:ProjectParticipants"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="ProjectParticipants">
+    <xs:complexContent mixed="false">
+      <xs:extension base="tns:ServiceDataObject">
+        <xs:sequence>
+          <xs:element xmlns:q10="urn:MemberService.service.livelink.opentext.com" minOccurs="0" maxOccurs="unbounded" name="Coordinators" type="q10:Member"/>
+          <xs:element xmlns:q11="urn:MemberService.service.livelink.opentext.com" minOccurs="0" maxOccurs="unbounded" name="Guests" type="q11:Member"/>
+          <xs:element xmlns:q12="urn:MemberService.service.livelink.opentext.com" minOccurs="0" maxOccurs="unbounded" name="Members" type="q12:Member"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="ProjectID" type="xs:long"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="GetProject">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="1" maxOccurs="1" name="projectID" type="xs:long"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetProjectResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="GetProjectResult" type="tns:ProjectInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetReadList">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="1" maxOccurs="1" name="discussionID" type="xs:long"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetReadListResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="unbounded" name="GetReadListResult" nillable="true" type="tns:DiscussionReadList"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="DiscussionReadList">
+    <xs:complexContent mixed="false">
+      <xs:extension base="tns:ServiceDataObject">
+        <xs:sequence>
+          <xs:element minOccurs="1" maxOccurs="1" name="FirstID" type="xs:long"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="LastID" type="xs:long"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="GetReplyByName">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="1" maxOccurs="1" name="topicReplyID" type="xs:long"/>
+        <xs:element minOccurs="0" maxOccurs="1" name="name" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetReplyByNameResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="GetReplyByNameResult" type="tns:ReplyInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="ReplyInfo">
+    <xs:complexContent mixed="false">
+      <xs:extension base="tns:DiscussionItem"/>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="DiscussionItem">
+    <xs:complexContent mixed="false">
+      <xs:extension base="tns:ServiceDataObject">
+        <xs:sequence>
+          <xs:element minOccurs="0" maxOccurs="unbounded" name="Attachments" type="tns:TopicAttachment"/>
+          <xs:element minOccurs="0" maxOccurs="1" name="Content" type="xs:string"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="ID" type="xs:long"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="Ordering" type="xs:long"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="ParentID" type="xs:long"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="PostedBy" type="xs:long"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="PostedDate" type="xs:dateTime"/>
+          <xs:element minOccurs="0" maxOccurs="1" name="Subject" type="xs:string"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="TopicInfo">
+    <xs:complexContent mixed="false">
+      <xs:extension base="tns:DiscussionItem"/>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="GetTask">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="1" maxOccurs="1" name="taskID" type="xs:long"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetTaskResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="GetTaskResult" type="tns:TaskInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetTaskGroup">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="1" maxOccurs="1" name="taskGroupID" type="xs:long"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetTaskGroupResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="GetTaskGroupResult" type="tns:TaskGroupInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetTaskList">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="1" maxOccurs="1" name="taskListID" type="xs:long"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetTaskListResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="GetTaskListResult" type="tns:TaskListInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetTopicByName">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="1" maxOccurs="1" name="discussionID" type="xs:long"/>
+        <xs:element minOccurs="0" maxOccurs="1" name="name" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetTopicByNameResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="GetTopicByNameResult" type="tns:TopicInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetTopicReply">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="1" maxOccurs="1" name="ID" type="xs:long"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetTopicReplyResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="GetTopicReplyResult" type="tns:DiscussionItem"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetUnreadInfo">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="unbounded" name="ids" type="xs:long"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GetUnreadInfoResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="unbounded" name="GetUnreadInfoResult" nillable="true" type="tns:UnreadInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="UnreadInfo">
+    <xs:complexContent mixed="false">
+      <xs:extension base="tns:ServiceDataObject">
+        <xs:sequence>
+          <xs:element minOccurs="1" maxOccurs="1" name="Total" type="xs:int"/>
+          <xs:element minOccurs="1" maxOccurs="1" name="Unread" type="xs:int"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="ListMilestones">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="1" maxOccurs="1" name="ID" type="xs:long"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="ListMilestonesResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="unbounded" name="ListMilestonesResult" nillable="true" type="tns:MilestoneInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="ListNews">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="1" maxOccurs="1" name="channelID" type="xs:long"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="ListNewsResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="unbounded" name="ListNewsResult" nillable="true" type="tns:NewsInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="ListReplies">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="1" maxOccurs="1" name="topicReplyID" type="xs:long"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="ListRepliesResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="unbounded" name="ListRepliesResult" nillable="true" type="tns:ReplyInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="ListTaskGroups">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="1" maxOccurs="1" name="ID" type="xs:long"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="ListTaskGroupsResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="unbounded" name="ListTaskGroupsResult" nillable="true" type="tns:TaskGroupInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="ListTasks">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="1" maxOccurs="1" name="ID" type="xs:long"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="ListTasksResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="unbounded" name="ListTasksResult" nillable="true" type="tns:TaskInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="ListTopics">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="1" maxOccurs="1" name="discussionID" type="xs:long"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="ListTopicsResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="unbounded" name="ListTopicsResult" nillable="true" type="tns:TopicInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="PostReply">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="1" maxOccurs="1" name="topicReply" type="xs:long"/>
+        <xs:element minOccurs="0" maxOccurs="1" name="subject" type="xs:string"/>
+        <xs:element minOccurs="0" maxOccurs="1" name="comments" type="xs:string"/>
+        <xs:element minOccurs="1" maxOccurs="1" name="livelinkAttachment" nillable="true" type="xs:long"/>
+        <xs:element xmlns:q13="urn:Core.service.livelink.opentext.com" minOccurs="0" maxOccurs="1" name="attach" type="q13:Attachment"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="PostReplyResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="PostReplyResult" type="tns:ReplyInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="PostTopic">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="1" maxOccurs="1" name="discussionID" type="xs:long"/>
+        <xs:element minOccurs="0" maxOccurs="1" name="subject" type="xs:string"/>
+        <xs:element minOccurs="0" maxOccurs="1" name="comments" type="xs:string"/>
+        <xs:element minOccurs="1" maxOccurs="1" name="livelinkAttachment" nillable="true" type="xs:long"/>
+        <xs:element xmlns:q14="urn:Core.service.livelink.opentext.com" minOccurs="0" maxOccurs="1" name="attach" type="q14:Attachment"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="PostTopicResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="1" name="PostTopicResult" type="tns:TopicInfo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="SetReadList">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="1" maxOccurs="1" name="discussionID" type="xs:long"/>
+        <xs:element minOccurs="0" maxOccurs="unbounded" name="readList" nillable="true" type="tns:DiscussionReadList"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="SetReadListResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="unbounded" name="SetReadListResult" nillable="true" type="tns:DiscussionReadList"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

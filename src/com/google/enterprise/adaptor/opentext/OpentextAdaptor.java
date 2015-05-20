@@ -28,6 +28,13 @@ import com.google.enterprise.adaptor.InvalidConfigurationException;
 import com.google.enterprise.adaptor.Request;
 import com.google.enterprise.adaptor.Response;
 
+import com.opentext.livelink.service.collaboration.Collaboration;
+import com.opentext.livelink.service.collaboration.Collaboration_Service;
+import com.opentext.livelink.service.collaboration.DiscussionItem;
+import com.opentext.livelink.service.collaboration.MilestoneInfo;
+import com.opentext.livelink.service.collaboration.NewsInfo;
+import com.opentext.livelink.service.collaboration.ProjectInfo;
+import com.opentext.livelink.service.collaboration.TaskInfo;
 import com.opentext.livelink.service.core.Authentication;
 import com.opentext.livelink.service.core.Authentication_Service;
 import com.opentext.livelink.service.core.BooleanValue;
@@ -155,7 +162,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
         "?func=ll&objAction={0}&objId={1}");
     config.addKey("opentext.displayUrl.objAction.Document", "overview");
     config.addKey("opentext.displayUrl.objAction.default", "properties");
-    config.addKey("opentext.excludedNodeTypes", "Alias, URL");
+    config.addKey("opentext.excludedNodeTypes", "");
     config.addKey("opentext.excludedNodeTypes.separator", ",");
     config.addKey("opentext.indexCategories", "true");
     config.addKey("opentext.indexCategoryNames", "true");
@@ -237,10 +244,10 @@ public class OpentextAdaptor extends AbstractAdaptor {
 
     this.contentServerUrl =
         config.getValue("opentext.displayUrl.contentServerUrl");
-    this.queryStrings =
-        config.getValuesWithPrefix("opentext.displayUrl.queryString.");
-    this.objectActions =
-        config.getValuesWithPrefix("opentext.displayUrl.objAction.");
+    this.queryStrings = OpentextAdaptor.fixTypeKeys(
+        config.getValuesWithPrefix("opentext.displayUrl.queryString."));
+    this.objectActions = OpentextAdaptor.fixTypeKeys(
+        config.getValuesWithPrefix("opentext.displayUrl.objAction."));
     log.log(Level.CONFIG, "opentext.displayUrl.contentServerUrl: {0}",
         this.contentServerUrl);
     log.log(Level.CONFIG, "opentext.displayUrl.queryString: {0}",
@@ -366,29 +373,50 @@ public class OpentextAdaptor extends AbstractAdaptor {
 
     if (this.excludedNodeTypes.contains(node.getType())) {
       log.log(Level.FINER, "Item {0} is excluded by type: {1}",
-          new String[] { String.valueOf(node.getID()), node.getType() });
+          new String[] { opentextDocId.toString(), node.getType() });
       resp.respondNotFound();
       return;
     }
 
-    if (node.isIsContainer()) {
-      // TODO: restrict the types of containers we handle.
-      doCategories(documentManagement, node, resp);
-      doNodeFeatures(node, resp);
-      doNodeProperties(documentManagement, node, resp);
-
-      doContainer(documentManagement, opentextDocId, node, resp);
-    } else {
-      if ("Document".equals(node.getType())) {
-        doCategories(documentManagement, node, resp);
-        doNodeFeatures(node, resp);
-        doNodeProperties(documentManagement, node, resp);
-
+    log.log(Level.FINER, "getDocContent for {0} with type {1}",
+        new String[] { opentextDocId.toString(), node.getType() });
+    doCategories(documentManagement, node, resp);
+    doNodeFeatures(node, resp);
+    doNodeProperties(documentManagement, node, resp);
+    switch (node.getType()) {
+      case "Collection":
+        doCollection(documentManagement, opentextDocId, node, resp);
+        break;
+      case "GenericNode:146": // Custom View
+        // fall through
+      case "GenericNode:335": // XML DTD
+        // fall through
+      case "Document":
         doDocument(documentManagement, opentextDocId, node, resp);
-      } else {
-        // TODO: other types.
-        resp.respondNotFound();
-      }
+        break;
+      case "Milestone":
+        doMilestone(documentManagement, opentextDocId, node, resp);
+        break;
+      case "News":
+        doNews(documentManagement, opentextDocId, node, resp);
+        break;
+      case "Project":
+        doProject(documentManagement, opentextDocId, node, resp);
+        break;
+      case "Reply":
+        // fall through
+      case "Topic":
+        doTopicReply(documentManagement, opentextDocId, node, resp);
+        break;
+      case "Task":
+        doTask(documentManagement, opentextDocId, node, resp);
+        break;
+      default:
+        if (node.isIsContainer()) {
+          doContainer(documentManagement, opentextDocId, node, resp);
+        } else {
+          doNode(documentManagement, opentextDocId, node, resp);
+        }
     }
   }
 
@@ -411,7 +439,8 @@ public class OpentextAdaptor extends AbstractAdaptor {
     }
 
     response.setContentType("text/html; charset=" + CHARSET.name());
-    // TODO: add displayUrl for container in Content Server
+    response.setDisplayUrl(
+        getDisplayUrl(containerNode.getType(), containerNode.getID()));
     Writer writer = new OutputStreamWriter(response.getOutputStream(),
         CHARSET);
     HtmlResponseWriter responseWriter = new HtmlResponseWriter(
@@ -419,19 +448,9 @@ public class OpentextAdaptor extends AbstractAdaptor {
     responseWriter.start(opentextDocId.getDocId(),
         opentextDocId.getDocId().getUniqueId());
     for (Node node : containerContents) {
-      String name = node.getName();
-      String encodedName;
-      try {
-        encodedName = URLEncoder.encode(name, CHARSET.name());
-      } catch (UnsupportedEncodingException unsupportedEncoding) {
-        log.log(Level.WARNING, "Error encoding value: " + name,
-            unsupportedEncoding);
-        encodedName = name;
-      }
-      // The ':' character is not allowed in Content Server names.
-      String uniqueId = opentextDocId.getEncodedPath() + "/"
-          + encodedName + ":" + node.getID();
-      responseWriter.addLink(new DocId(uniqueId), name);
+      responseWriter.addLink(
+          getChildDocId(opentextDocId, node.getName(), node.getID()),
+          node.getName());
     }
     responseWriter.finish();
   }
@@ -596,6 +615,329 @@ public class OpentextAdaptor extends AbstractAdaptor {
     builder.append(MessageFormat.format(queryString, objectAction,
             Long.toString(objectId)));
     return URI.create(builder.toString());
+  }
+
+  @VisibleForTesting
+  DocId getChildDocId(OpentextDocId parent, String name, long id) {
+    String encodedName;
+    try {
+      encodedName = URLEncoder.encode(name, CHARSET.name());
+    } catch (UnsupportedEncodingException unsupportedEncoding) {
+      log.log(Level.WARNING, "Error encoding value: " + name,
+          unsupportedEncoding);
+      encodedName = name;
+    }
+    // The ':' character is not allowed in Content Server names.
+    String uniqueId = parent.getEncodedPath() + "/"
+          + encodedName + ":" + id;
+    return new DocId(uniqueId);
+  }
+
+  @VisibleForTesting
+  void doNode(DocumentManagement documentManagement,
+      OpentextDocId opentextDocId, Node node, Response response)
+      throws IOException {
+    response.setDisplayUrl(getDisplayUrl(node.getType(), node.getID()));
+    response.setContentType("text/html; charset=" + CHARSET.name());
+    Writer writer = new OutputStreamWriter(response.getOutputStream(),
+        CHARSET);
+    writer.write("<!DOCTYPE html>\n<html><head><title>");
+    writer.write(escapeContent(node.getName()));
+    writer.write("</title></head><body><h1>");
+    writer.write(escapeContent(node.getName()));
+    writer.write("</h1>");
+    writer.write("</body></html>");
+    writer.flush();
+  }
+
+  /* A Collection is a set of references to other Content Server
+   * objects. Since the actual objects exist elsewhere, we only
+   * index the names here.
+   */
+  @VisibleForTesting
+  void doCollection(DocumentManagement documentManagement,
+      OpentextDocId opentextDocId, Node node, Response response)
+      throws IOException {
+    List<Node> collectionContents;
+    try {
+      collectionContents = documentManagement.listNodes(node.getID(), true);
+    } catch (SOAPFaultException soapFaultException) {
+      log.log(Level.WARNING,
+          "Error retrieving collection contents: " + opentextDocId,
+          soapFaultException);
+      // If we can't fetch the collection contents, at least send
+      // the collection node itself.
+      doNode(documentManagement, opentextDocId, node, response);
+      return;
+    }
+    String[] bodyText = new String[collectionContents.size()];
+    for (int i = 0; i < collectionContents.size(); i++) {
+      bodyText[i] = collectionContents.get(i).getName();
+    }
+    writeHtmlResponse(response, node, node.getName(), bodyText);
+  }
+
+  @VisibleForTesting
+  void doNews(DocumentManagement documentManagement,
+      OpentextDocId opentextDocId, Node node, Response response)
+      throws IOException {
+    Collaboration collaboration =
+        this.soapFactory.newCollaboration(documentManagement);
+    NewsInfo newsInfo = null;
+    try {
+      newsInfo = collaboration.getNews(node.getID());
+    } catch (SOAPFaultException soapFaultException) {
+      log.log(Level.WARNING, "Error retrieving news item: " + opentextDocId,
+          soapFaultException);
+
+      // Some types of children that can be added using the UI
+      // seem to cause an error in getNews when loading the
+      // attachments. If that happens, we can't get the
+      // News-specific data like Headline and Story, but we can
+      // still treat the node as a generic container.
+      doContainer(documentManagement, opentextDocId, node, response);
+      return;
+    }
+    addChildAnchors(documentManagement, opentextDocId, response);
+    addDateMetadata("EffectiveDate", newsInfo.getEffectiveDate(), response);
+    addDateMetadata("ExpirationDate", newsInfo.getExpirationDate(), response);
+    writeHtmlResponse(response, node,
+        newsInfo.getHeadline(), newsInfo.getStory());
+  }
+
+  @VisibleForTesting
+  void doTopicReply(DocumentManagement documentManagement,
+      OpentextDocId opentextDocId, Node node, Response response)
+      throws IOException {
+    Collaboration collaboration =
+        this.soapFactory.newCollaboration(documentManagement);
+    DiscussionItem discussionItem = null;
+    try {
+      discussionItem = collaboration.getTopicReply(node.getID());
+    } catch (SOAPFaultException soapFaultException) {
+      log.log(Level.WARNING,
+          "Error retrieving discussion item: " + opentextDocId,
+          soapFaultException);
+
+      // Some types of children that can be added using the UI
+      // seem to cause an error in getTopicReply when loading the
+      // attachments. If that happens, we can't get the
+      // DiscussionItem-specific data like Subject and Content,
+      // but we can still treat the node as a generic container.
+      doContainer(documentManagement, opentextDocId, node, response);
+      return;
+    }
+    addChildAnchors(documentManagement, opentextDocId, response);
+    addDateMetadata("PostedDate", discussionItem.getPostedDate(), response);
+    addMemberMetadata("PostedBy", discussionItem.getPostedBy(),
+        response, this.soapFactory.newMemberService(documentManagement));
+    writeHtmlResponse(response, node,
+        discussionItem.getSubject(), discussionItem.getContent());
+  }
+
+  @VisibleForTesting
+  void doTask(DocumentManagement documentManagement,
+      OpentextDocId opentextDocId, Node node, Response response)
+      throws IOException {
+    Collaboration collaboration =
+        this.soapFactory.newCollaboration(documentManagement);
+    TaskInfo taskInfo = null;
+    try {
+      taskInfo = collaboration.getTask(node.getID());
+    } catch (SOAPFaultException soapFaultException) {
+      log.log(Level.WARNING,
+          "Error retrieving task: " + opentextDocId, soapFaultException);
+      // If we can't fetch the TaskInfo, at least treat the node
+      // as a generic container.
+      doContainer(documentManagement, opentextDocId, node, response);
+      return;
+    }
+    addChildAnchors(documentManagement, opentextDocId, response);
+    addMemberMetadata("AssignedTo", taskInfo.getAssignedTo(),
+        response, this.soapFactory.newMemberService(documentManagement));
+    addDateMetadata("CompletionDate", taskInfo.getCompletionDate(), response);
+    addDateMetadata("DateAssigned", taskInfo.getDateAssigned(), response);
+    addDateMetadata("DueDate", taskInfo.getDueDate(), response);
+    addDateMetadata("StartDate", taskInfo.getStartDate(), response);
+    addStringMetadata("Priority", taskInfo.getPriority().value(), response);
+    addStringMetadata("Status", taskInfo.getStatus().value(), response);
+    writeHtmlResponse(response, node,
+        node.getName(), taskInfo.getComments(), taskInfo.getInstructions());
+  }
+
+  @VisibleForTesting
+  void doMilestone(DocumentManagement documentManagement,
+      OpentextDocId opentextDocId, Node node, Response response)
+      throws IOException {
+    Collaboration collaboration =
+        this.soapFactory.newCollaboration(documentManagement);
+    MilestoneInfo milestoneInfo = null;
+    try {
+      milestoneInfo = collaboration.getMilestone(node.getID());
+    } catch (SOAPFaultException soapFaultException) {
+      log.log(Level.WARNING,
+          "Error retrieving milestone: " + opentextDocId, soapFaultException);
+      // If we can't fetch the MilestoneInfo, at least treat the
+      // node as a generic container.
+      doContainer(documentManagement, opentextDocId, node, response);
+      return;
+    }
+    addChildAnchors(documentManagement, opentextDocId, response);
+    addDateMetadata("ActualDate", milestoneInfo.getActualDate(), response);
+    addDateMetadata("OriginalTargetDate",
+        milestoneInfo.getOriginalTargetDate(), response);
+    addDateMetadata("TargetDate", milestoneInfo.getTargetDate(), response);
+    response.addMetadata("Duration",
+        String.valueOf(milestoneInfo.getDuration()));
+    response.addMetadata("NumActive",
+        String.valueOf(milestoneInfo.getNumActive()));
+    response.addMetadata("NumCancelled",
+        String.valueOf(milestoneInfo.getNumCancelled()));
+    response.addMetadata("NumCompleted",
+        String.valueOf(milestoneInfo.getNumCompleted()));
+    response.addMetadata("NumInProcess",
+        String.valueOf(milestoneInfo.getNumInprocess()));
+    response.addMetadata("NumIssue",
+        String.valueOf(milestoneInfo.getNumIssue()));
+    response.addMetadata("NumLate",
+        String.valueOf(milestoneInfo.getNumLate()));
+    response.addMetadata("NumOnHold",
+        String.valueOf(milestoneInfo.getNumOnHold()));
+    response.addMetadata("NumPending",
+        String.valueOf(milestoneInfo.getNumPending()));
+    response.addMetadata("NumTasks",
+        String.valueOf(milestoneInfo.getNumTasks()));
+    response.addMetadata("PercentCancelled",
+        String.valueOf(milestoneInfo.getPercentCancelled()));
+    response.addMetadata("PercentComplete",
+        String.valueOf(milestoneInfo.getPercentComplete()));
+    response.addMetadata("PercentInProcess",
+        String.valueOf(milestoneInfo.getPercentInprocess()));
+    response.addMetadata("PercentIssue",
+        String.valueOf(milestoneInfo.getPercentIssue()));
+    response.addMetadata("PercentLate",
+        String.valueOf(milestoneInfo.getPercentLate()));
+    response.addMetadata("PercentOnHold",
+        String.valueOf(milestoneInfo.getPercentOnHold()));
+    response.addMetadata("PercentPending",
+        String.valueOf(milestoneInfo.getPercentPending()));
+    response.addMetadata("Resources",
+        String.valueOf(milestoneInfo.getResources()));
+    writeHtmlResponse(response, node, node.getName());
+  }
+
+  @VisibleForTesting
+  void doProject(DocumentManagement documentManagement,
+      OpentextDocId opentextDocId, Node node, Response response)
+      throws IOException {
+    Collaboration collaboration =
+        this.soapFactory.newCollaboration(documentManagement);
+    ProjectInfo projectInfo = null;
+    try {
+      projectInfo = collaboration.getProject(node.getID());
+    } catch (SOAPFaultException soapFaultException) {
+      log.log(Level.WARNING,
+          "Error retrieving project: " + opentextDocId, soapFaultException);
+      // If we can't fetch the ProjectInfo, at least treat the node
+      // as a generic container.
+      doContainer(documentManagement, opentextDocId, node, response);
+      return;
+    }
+    addChildAnchors(documentManagement, opentextDocId, response);
+    addDateMetadata("StartDate", projectInfo.getStartDate(), response);
+    addDateMetadata("TargetDate", projectInfo.getTargetDate(), response);
+    addStringMetadata("Goals", projectInfo.getGoals(), response);
+    addStringMetadata("Initiatives", projectInfo.getInitiatives(), response);
+    addStringMetadata("Mission", projectInfo.getMission(), response);
+    addStringMetadata("Objectives", projectInfo.getObjectives(), response);
+    addStringMetadata("Status", projectInfo.getStatus().value(), response);
+    writeHtmlResponse(response, node, node.getName());
+  }
+
+  private void addChildAnchors(DocumentManagement documentManagement,
+      OpentextDocId opentextDocId, Response response) {
+    try {
+      List<Node> children =
+          documentManagement.listNodes(opentextDocId.getNodeId(), true);
+      for (Node child : children) {
+        DocId docId =
+            getChildDocId(opentextDocId, child.getName(), child.getID());
+        response.addAnchor(this.context.getDocIdEncoder().encodeDocId(docId),
+            child.getName());
+      }
+    } catch (SOAPFaultException soapFaultException) {
+      log.log(Level.WARNING,
+          "Error retrieving children of node: " + opentextDocId,
+          soapFaultException);
+    }
+  }
+
+  private void writeHtmlResponse(Response response, Node node,
+      String header, String... body) throws IOException {
+    response.setDisplayUrl(getDisplayUrl(node.getType(), node.getID()));
+    response.setContentType("text/html; charset=" + CHARSET.name());
+    Writer writer = new OutputStreamWriter(response.getOutputStream(),
+        CHARSET);
+    writer.write("<!DOCTYPE html>\n<html><head><title>");
+    writer.write(escapeContent(node.getName()));
+    writer.write("</title></head><body><h1>");
+    if (header != null) {
+      writer.write(escapeContent(header));
+    } else {
+      writer.write(escapeContent(node.getName()));
+    }
+    writer.write("</h1>");
+    for (String contentString : body) {
+      writer.write("<p>");
+      writer.write(escapeContent(contentString));
+      writer.write("</p>");
+    }
+    writer.write("</body></html>");
+    writer.flush();
+  }
+
+  /* Copied from HtmlResponseWriter. Modified to cope with null
+   * arguments.
+   */
+  private String escapeContent(String raw) {
+    if (raw == null) {
+      return "";
+    }
+    return raw.replace("&", "&amp;").replace("<", "&lt;");
+  }
+
+  /* Copied from HtmlResponseWriter. */
+  private String escapeAttributeValue(String raw) {
+    return escapeContent(raw).replace("\"", "&quot;").replace("'", "&apos;");
+  }
+
+  private void addStringMetadata(
+      String name, String value, Response response) {
+    if (!Strings.isNullOrEmpty(value)) {
+      response.addMetadata(name, value);
+    }
+  }
+
+  private void addDateMetadata(
+      String name, XMLGregorianCalendar xmlCalendar, Response response) {
+    if (xmlCalendar != null) {
+      response.addMetadata(name, getDateAsString(xmlCalendar));
+    }
+  }
+
+  private void addMemberMetadata(String name, Long memberId,
+      Response response, MemberService memberService) {
+    if (memberId == null || memberId == 0) {
+      return;
+    }
+    try {
+      Member member = memberService.getMemberById(memberId);
+      addStringMetadata(name, member.getName(), response);
+    } catch (SOAPFaultException soapFaultException) {
+      log.log(Level.FINE,
+          "Failed to look up member for " + name + " = " + memberId,
+          soapFaultException);
+    }
   }
 
   @VisibleForTesting
@@ -937,6 +1279,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
     DocumentManagement newDocumentManagement(String authenticationToken);
     ContentService newContentService(DocumentManagement documentManagement);
     MemberService newMemberService(DocumentManagement documentManagement);
+    Collaboration newCollaboration(DocumentManagement documentManagement);
     void configure(Config config);
   }
 
@@ -946,6 +1289,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
     private final DocumentManagement_Service documentManagementService;
     private final ContentService_Service contentServiceService;
     private final MemberService_Service memberServiceService;
+    private final Collaboration_Service collaborationService;
     private String webServicesUrl;
 
     SoapFactoryImpl() {
@@ -960,6 +1304,8 @@ public class OpentextAdaptor extends AbstractAdaptor {
       this.memberServiceService = new MemberService_Service(
           MemberService_Service.class.getResource(
               "MemberService.wsdl"));
+      this.collaborationService = new Collaboration_Service(
+          Collaboration_Service.class.getResource("Collaboration.wsdl"));
     }
 
     @VisibleForTesting
@@ -1024,6 +1370,21 @@ public class OpentextAdaptor extends AbstractAdaptor {
           getAuthenticationToken((BindingProvider) documentManagement));
 
       return memberServicePort;
+    }
+
+    @Override
+    public Collaboration newCollaboration(
+        DocumentManagement documentManagement) {
+      Collaboration collaborationPort =
+          collaborationService.getBasicHttpBindingCollaboration();
+
+      setEndpointAddress(
+          (BindingProvider) collaborationPort, "Collaboration");
+      setAuthenticationHandler(
+          (BindingProvider) collaborationPort,
+          getAuthenticationToken((BindingProvider) documentManagement));
+
+      return collaborationPort;
     }
 
     private void setEndpointAddress(BindingProvider bindingProvider,
@@ -1128,6 +1489,17 @@ public class OpentextAdaptor extends AbstractAdaptor {
       List<String> values = Lists.newArrayList(Splitter.on(separator)
           .trimResults().omitEmptyStrings().split(entry.getValue()));
       result.put(key, values);
+    }
+    return result;
+  }
+
+  @VisibleForTesting
+  static Map<String, String> fixTypeKeys(
+      Map<String, String> mapWithTypesAsKeys) {
+    Map<String, String> result = new HashMap<String, String>();
+    for (Map.Entry<String, String> entry : mapWithTypesAsKeys.entrySet()) {
+      String key = OpentextAdaptor.getCanonicalType(entry.getKey());
+      result.put(key, entry.getValue());
     }
     return result;
   }

@@ -168,6 +168,17 @@ lib/plexi submodule or add the the command line argument
         <include name="MemberService-3.xsd"/>
       </fileset>
     </copy>
+    <wsimport service="Collaboration"/>
+    <copy todir="${build-generate.dir}/com/opentext/livelink/service/collaboration/">
+      <fileset dir=".">
+        <include name="Collaboration.wsdl"/>
+        <include name="Collaboration-1.xsd"/>
+        <include name="Collaboration-2.xsd"/>
+        <include name="Collaboration-3.xsd"/>
+        <include name="Collaboration-4.xsd"/>
+        <include name="Collaboration-5.xsd"/>
+      </fileset>
+    </copy>
   </target>
 
   <target name="-real-build" depends="-plexi-build,-generate">

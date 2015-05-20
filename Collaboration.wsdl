@@ -1,0 +1,1155 @@
+<?xml version='1.0' encoding='UTF-8'?><!-- Published by JAX-WS RI at http://jax-ws.dev.java.net. RI's version is JAX-WS RI 2.2.7-b01  svn-revision#${svn.Last.Changed.Rev}. --><wsdl:definitions xmlns:wsx="http://schemas.xmlsoap.org/ws/2004/09/mex" xmlns:wsa10="http://www.w3.org/2005/08/addressing" xmlns:tns="urn:Collaboration.service.livelink.opentext.com" xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd" xmlns:wsaw="http://www.w3.org/2006/05/addressing/wsdl" xmlns:wsp="http://schemas.xmlsoap.org/ws/2004/09/policy" xmlns:wsap="http://schemas.xmlsoap.org/ws/2004/08/addressing/policy" xmlns:msc="http://schemas.microsoft.com/ws/2005/12/wsdl/contract" xmlns:wsam="http://www.w3.org/2007/05/addressing/metadata" xmlns:wsa="http://schemas.xmlsoap.org/ws/2004/08/addressing" xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://schemas.xmlsoap.org/wsdl/soap12/" xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/" xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" name="Collaboration" targetNamespace="urn:Collaboration.service.livelink.opentext.com">
+  <wsdl:types>
+    <xsd:schema targetNamespace="urn:Collaboration.service.livelink.opentext.com/Imports">
+      <xsd:import schemaLocation="Collaboration-3.xsd" namespace="urn:Collaboration.service.livelink.opentext.com"/>
+      <xsd:import schemaLocation="Collaboration-1.xsd" namespace="urn:api.ecm.opentext.com"/>
+      <xsd:import schemaLocation="Collaboration-2.xsd" namespace="urn:DocMan.service.livelink.opentext.com"/>
+      <xsd:import schemaLocation="Collaboration-4.xsd" namespace="urn:Core.service.livelink.opentext.com"/>
+      <xsd:import schemaLocation="Collaboration-5.xsd" namespace="urn:MemberService.service.livelink.opentext.com"/>
+    </xsd:schema>
+  </wsdl:types>
+  <wsdl:message name="UpdateMilestoneRequest">
+    <wsdl:part name="parameters" element="tns:UpdateMilestone"/>
+  </wsdl:message>
+  <wsdl:message name="UpdateMilestoneRequest_Headers">
+    <wsdl:part xmlns:q1="urn:api.ecm.opentext.com" name="OTAuthentication" element="q1:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="UpdateMilestoneResponse">
+    <wsdl:part name="parameters" element="tns:UpdateMilestoneResponse"/>
+  </wsdl:message>
+  <wsdl:message name="UpdateMilestoneResponse_Headers">
+    <wsdl:part xmlns:q2="urn:api.ecm.opentext.com" name="OTAuthentication" element="q2:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="UpdateNewsRequest">
+    <wsdl:part name="parameters" element="tns:UpdateNews"/>
+  </wsdl:message>
+  <wsdl:message name="UpdateNewsRequest_Headers">
+    <wsdl:part xmlns:q3="urn:api.ecm.opentext.com" name="OTAuthentication" element="q3:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="UpdateNewsResponse">
+    <wsdl:part name="parameters" element="tns:UpdateNewsResponse"/>
+  </wsdl:message>
+  <wsdl:message name="UpdateNewsResponse_Headers">
+    <wsdl:part xmlns:q4="urn:api.ecm.opentext.com" name="OTAuthentication" element="q4:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="UpdateProjectRequest">
+    <wsdl:part name="parameters" element="tns:UpdateProject"/>
+  </wsdl:message>
+  <wsdl:message name="UpdateProjectRequest_Headers">
+    <wsdl:part xmlns:q5="urn:api.ecm.opentext.com" name="OTAuthentication" element="q5:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="UpdateProjectResponse">
+    <wsdl:part name="parameters" element="tns:UpdateProjectResponse"/>
+  </wsdl:message>
+  <wsdl:message name="UpdateProjectResponse_Headers">
+    <wsdl:part xmlns:q6="urn:api.ecm.opentext.com" name="OTAuthentication" element="q6:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="UpdateProjectParticipantsRequest">
+    <wsdl:part name="parameters" element="tns:UpdateProjectParticipants"/>
+  </wsdl:message>
+  <wsdl:message name="UpdateProjectParticipantsRequest_Headers">
+    <wsdl:part xmlns:q7="urn:api.ecm.opentext.com" name="OTAuthentication" element="q7:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="UpdateProjectParticipantsResponse">
+    <wsdl:part name="parameters" element="tns:UpdateProjectParticipantsResponse"/>
+  </wsdl:message>
+  <wsdl:message name="UpdateProjectParticipantsResponse_Headers">
+    <wsdl:part xmlns:q8="urn:api.ecm.opentext.com" name="OTAuthentication" element="q8:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="UpdateTaskRequest">
+    <wsdl:part name="parameters" element="tns:UpdateTask"/>
+  </wsdl:message>
+  <wsdl:message name="UpdateTaskRequest_Headers">
+    <wsdl:part xmlns:q9="urn:api.ecm.opentext.com" name="OTAuthentication" element="q9:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="UpdateTaskResponse">
+    <wsdl:part name="parameters" element="tns:UpdateTaskResponse"/>
+  </wsdl:message>
+  <wsdl:message name="UpdateTaskResponse_Headers">
+    <wsdl:part xmlns:q10="urn:api.ecm.opentext.com" name="OTAuthentication" element="q10:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="UpdateTaskGroupRequest">
+    <wsdl:part name="parameters" element="tns:UpdateTaskGroup"/>
+  </wsdl:message>
+  <wsdl:message name="UpdateTaskGroupRequest_Headers">
+    <wsdl:part xmlns:q11="urn:api.ecm.opentext.com" name="OTAuthentication" element="q11:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="UpdateTaskGroupResponse">
+    <wsdl:part name="parameters" element="tns:UpdateTaskGroupResponse"/>
+  </wsdl:message>
+  <wsdl:message name="UpdateTaskGroupResponse_Headers">
+    <wsdl:part xmlns:q12="urn:api.ecm.opentext.com" name="OTAuthentication" element="q12:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="CreateChannelRequest">
+    <wsdl:part name="parameters" element="tns:CreateChannel"/>
+  </wsdl:message>
+  <wsdl:message name="CreateChannelRequest_Headers">
+    <wsdl:part xmlns:q13="urn:api.ecm.opentext.com" name="OTAuthentication" element="q13:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="CreateChannelResponse">
+    <wsdl:part name="parameters" element="tns:CreateChannelResponse"/>
+  </wsdl:message>
+  <wsdl:message name="CreateChannelResponse_Headers">
+    <wsdl:part xmlns:q14="urn:api.ecm.opentext.com" name="OTAuthentication" element="q14:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="CreateDiscussionRequest">
+    <wsdl:part name="parameters" element="tns:CreateDiscussion"/>
+  </wsdl:message>
+  <wsdl:message name="CreateDiscussionRequest_Headers">
+    <wsdl:part xmlns:q15="urn:api.ecm.opentext.com" name="OTAuthentication" element="q15:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="CreateDiscussionResponse">
+    <wsdl:part name="parameters" element="tns:CreateDiscussionResponse"/>
+  </wsdl:message>
+  <wsdl:message name="CreateDiscussionResponse_Headers">
+    <wsdl:part xmlns:q16="urn:api.ecm.opentext.com" name="OTAuthentication" element="q16:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="CreateMilestoneRequest">
+    <wsdl:part name="parameters" element="tns:CreateMilestone"/>
+  </wsdl:message>
+  <wsdl:message name="CreateMilestoneRequest_Headers">
+    <wsdl:part xmlns:q17="urn:api.ecm.opentext.com" name="OTAuthentication" element="q17:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="CreateMilestoneResponse">
+    <wsdl:part name="parameters" element="tns:CreateMilestoneResponse"/>
+  </wsdl:message>
+  <wsdl:message name="CreateMilestoneResponse_Headers">
+    <wsdl:part xmlns:q18="urn:api.ecm.opentext.com" name="OTAuthentication" element="q18:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="CreateNewsRequest">
+    <wsdl:part name="parameters" element="tns:CreateNews"/>
+  </wsdl:message>
+  <wsdl:message name="CreateNewsRequest_Headers">
+    <wsdl:part xmlns:q19="urn:api.ecm.opentext.com" name="OTAuthentication" element="q19:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="CreateNewsResponse">
+    <wsdl:part name="parameters" element="tns:CreateNewsResponse"/>
+  </wsdl:message>
+  <wsdl:message name="CreateNewsResponse_Headers">
+    <wsdl:part xmlns:q20="urn:api.ecm.opentext.com" name="OTAuthentication" element="q20:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="CreateProjectRequest">
+    <wsdl:part name="parameters" element="tns:CreateProject"/>
+  </wsdl:message>
+  <wsdl:message name="CreateProjectRequest_Headers">
+    <wsdl:part xmlns:q21="urn:api.ecm.opentext.com" name="OTAuthentication" element="q21:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="CreateProjectResponse">
+    <wsdl:part name="parameters" element="tns:CreateProjectResponse"/>
+  </wsdl:message>
+  <wsdl:message name="CreateProjectResponse_Headers">
+    <wsdl:part xmlns:q22="urn:api.ecm.opentext.com" name="OTAuthentication" element="q22:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="CreateTaskRequest">
+    <wsdl:part name="parameters" element="tns:CreateTask"/>
+  </wsdl:message>
+  <wsdl:message name="CreateTaskRequest_Headers">
+    <wsdl:part xmlns:q23="urn:api.ecm.opentext.com" name="OTAuthentication" element="q23:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="CreateTaskResponse">
+    <wsdl:part name="parameters" element="tns:CreateTaskResponse"/>
+  </wsdl:message>
+  <wsdl:message name="CreateTaskResponse_Headers">
+    <wsdl:part xmlns:q24="urn:api.ecm.opentext.com" name="OTAuthentication" element="q24:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="CreateTaskGroupRequest">
+    <wsdl:part name="parameters" element="tns:CreateTaskGroup"/>
+  </wsdl:message>
+  <wsdl:message name="CreateTaskGroupRequest_Headers">
+    <wsdl:part xmlns:q25="urn:api.ecm.opentext.com" name="OTAuthentication" element="q25:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="CreateTaskGroupResponse">
+    <wsdl:part name="parameters" element="tns:CreateTaskGroupResponse"/>
+  </wsdl:message>
+  <wsdl:message name="CreateTaskGroupResponse_Headers">
+    <wsdl:part xmlns:q26="urn:api.ecm.opentext.com" name="OTAuthentication" element="q26:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="CreateTaskListRequest">
+    <wsdl:part name="parameters" element="tns:CreateTaskList"/>
+  </wsdl:message>
+  <wsdl:message name="CreateTaskListRequest_Headers">
+    <wsdl:part xmlns:q27="urn:api.ecm.opentext.com" name="OTAuthentication" element="q27:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="CreateTaskListResponse">
+    <wsdl:part name="parameters" element="tns:CreateTaskListResponse"/>
+  </wsdl:message>
+  <wsdl:message name="CreateTaskListResponse_Headers">
+    <wsdl:part xmlns:q28="urn:api.ecm.opentext.com" name="OTAuthentication" element="q28:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetChannelRequest">
+    <wsdl:part name="parameters" element="tns:GetChannel"/>
+  </wsdl:message>
+  <wsdl:message name="GetChannelRequest_Headers">
+    <wsdl:part xmlns:q29="urn:api.ecm.opentext.com" name="OTAuthentication" element="q29:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetChannelResponse">
+    <wsdl:part name="parameters" element="tns:GetChannelResponse"/>
+  </wsdl:message>
+  <wsdl:message name="GetChannelResponse_Headers">
+    <wsdl:part xmlns:q30="urn:api.ecm.opentext.com" name="OTAuthentication" element="q30:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetDiscussionRequest">
+    <wsdl:part name="parameters" element="tns:GetDiscussion"/>
+  </wsdl:message>
+  <wsdl:message name="GetDiscussionRequest_Headers">
+    <wsdl:part xmlns:q31="urn:api.ecm.opentext.com" name="OTAuthentication" element="q31:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetDiscussionResponse">
+    <wsdl:part name="parameters" element="tns:GetDiscussionResponse"/>
+  </wsdl:message>
+  <wsdl:message name="GetDiscussionResponse_Headers">
+    <wsdl:part xmlns:q32="urn:api.ecm.opentext.com" name="OTAuthentication" element="q32:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetMilestoneRequest">
+    <wsdl:part name="parameters" element="tns:GetMilestone"/>
+  </wsdl:message>
+  <wsdl:message name="GetMilestoneRequest_Headers">
+    <wsdl:part xmlns:q33="urn:api.ecm.opentext.com" name="OTAuthentication" element="q33:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetMilestoneResponse">
+    <wsdl:part name="parameters" element="tns:GetMilestoneResponse"/>
+  </wsdl:message>
+  <wsdl:message name="GetMilestoneResponse_Headers">
+    <wsdl:part xmlns:q34="urn:api.ecm.opentext.com" name="OTAuthentication" element="q34:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetMyAssignmentsRequest">
+    <wsdl:part name="parameters" element="tns:GetMyAssignments"/>
+  </wsdl:message>
+  <wsdl:message name="GetMyAssignmentsRequest_Headers">
+    <wsdl:part xmlns:q35="urn:api.ecm.opentext.com" name="OTAuthentication" element="q35:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetMyAssignmentsResponse">
+    <wsdl:part name="parameters" element="tns:GetMyAssignmentsResponse"/>
+  </wsdl:message>
+  <wsdl:message name="GetMyAssignmentsResponse_Headers">
+    <wsdl:part xmlns:q36="urn:api.ecm.opentext.com" name="OTAuthentication" element="q36:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetMyChannelsRequest">
+    <wsdl:part name="parameters" element="tns:GetMyChannels"/>
+  </wsdl:message>
+  <wsdl:message name="GetMyChannelsRequest_Headers">
+    <wsdl:part xmlns:q37="urn:api.ecm.opentext.com" name="OTAuthentication" element="q37:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetMyChannelsResponse">
+    <wsdl:part name="parameters" element="tns:GetMyChannelsResponse"/>
+  </wsdl:message>
+  <wsdl:message name="GetMyChannelsResponse_Headers">
+    <wsdl:part xmlns:q38="urn:api.ecm.opentext.com" name="OTAuthentication" element="q38:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetMyDiscussionsRequest">
+    <wsdl:part name="parameters" element="tns:GetMyDiscussions"/>
+  </wsdl:message>
+  <wsdl:message name="GetMyDiscussionsRequest_Headers">
+    <wsdl:part xmlns:q39="urn:api.ecm.opentext.com" name="OTAuthentication" element="q39:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetMyDiscussionsResponse">
+    <wsdl:part name="parameters" element="tns:GetMyDiscussionsResponse"/>
+  </wsdl:message>
+  <wsdl:message name="GetMyDiscussionsResponse_Headers">
+    <wsdl:part xmlns:q40="urn:api.ecm.opentext.com" name="OTAuthentication" element="q40:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetMyProjectsRequest">
+    <wsdl:part name="parameters" element="tns:GetMyProjects"/>
+  </wsdl:message>
+  <wsdl:message name="GetMyProjectsRequest_Headers">
+    <wsdl:part xmlns:q41="urn:api.ecm.opentext.com" name="OTAuthentication" element="q41:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetMyProjectsResponse">
+    <wsdl:part name="parameters" element="tns:GetMyProjectsResponse"/>
+  </wsdl:message>
+  <wsdl:message name="GetMyProjectsResponse_Headers">
+    <wsdl:part xmlns:q42="urn:api.ecm.opentext.com" name="OTAuthentication" element="q42:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetMyTaskListsRequest">
+    <wsdl:part name="parameters" element="tns:GetMyTaskLists"/>
+  </wsdl:message>
+  <wsdl:message name="GetMyTaskListsRequest_Headers">
+    <wsdl:part xmlns:q43="urn:api.ecm.opentext.com" name="OTAuthentication" element="q43:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetMyTaskListsResponse">
+    <wsdl:part name="parameters" element="tns:GetMyTaskListsResponse"/>
+  </wsdl:message>
+  <wsdl:message name="GetMyTaskListsResponse_Headers">
+    <wsdl:part xmlns:q44="urn:api.ecm.opentext.com" name="OTAuthentication" element="q44:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetNewsRequest">
+    <wsdl:part name="parameters" element="tns:GetNews"/>
+  </wsdl:message>
+  <wsdl:message name="GetNewsRequest_Headers">
+    <wsdl:part xmlns:q45="urn:api.ecm.opentext.com" name="OTAuthentication" element="q45:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetNewsResponse">
+    <wsdl:part name="parameters" element="tns:GetNewsResponse"/>
+  </wsdl:message>
+  <wsdl:message name="GetNewsResponse_Headers">
+    <wsdl:part xmlns:q46="urn:api.ecm.opentext.com" name="OTAuthentication" element="q46:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetParticipantsRequest">
+    <wsdl:part name="parameters" element="tns:GetParticipants"/>
+  </wsdl:message>
+  <wsdl:message name="GetParticipantsRequest_Headers">
+    <wsdl:part xmlns:q47="urn:api.ecm.opentext.com" name="OTAuthentication" element="q47:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetParticipantsResponse">
+    <wsdl:part name="parameters" element="tns:GetParticipantsResponse"/>
+  </wsdl:message>
+  <wsdl:message name="GetParticipantsResponse_Headers">
+    <wsdl:part xmlns:q48="urn:api.ecm.opentext.com" name="OTAuthentication" element="q48:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetProjectRequest">
+    <wsdl:part name="parameters" element="tns:GetProject"/>
+  </wsdl:message>
+  <wsdl:message name="GetProjectRequest_Headers">
+    <wsdl:part xmlns:q49="urn:api.ecm.opentext.com" name="OTAuthentication" element="q49:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetProjectResponse">
+    <wsdl:part name="parameters" element="tns:GetProjectResponse"/>
+  </wsdl:message>
+  <wsdl:message name="GetProjectResponse_Headers">
+    <wsdl:part xmlns:q50="urn:api.ecm.opentext.com" name="OTAuthentication" element="q50:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetReadListRequest">
+    <wsdl:part name="parameters" element="tns:GetReadList"/>
+  </wsdl:message>
+  <wsdl:message name="GetReadListRequest_Headers">
+    <wsdl:part xmlns:q51="urn:api.ecm.opentext.com" name="OTAuthentication" element="q51:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetReadListResponse">
+    <wsdl:part name="parameters" element="tns:GetReadListResponse"/>
+  </wsdl:message>
+  <wsdl:message name="GetReadListResponse_Headers">
+    <wsdl:part xmlns:q52="urn:api.ecm.opentext.com" name="OTAuthentication" element="q52:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetReplyByNameRequest">
+    <wsdl:part name="parameters" element="tns:GetReplyByName"/>
+  </wsdl:message>
+  <wsdl:message name="GetReplyByNameRequest_Headers">
+    <wsdl:part xmlns:q53="urn:api.ecm.opentext.com" name="OTAuthentication" element="q53:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetReplyByNameResponse">
+    <wsdl:part name="parameters" element="tns:GetReplyByNameResponse"/>
+  </wsdl:message>
+  <wsdl:message name="GetReplyByNameResponse_Headers">
+    <wsdl:part xmlns:q54="urn:api.ecm.opentext.com" name="OTAuthentication" element="q54:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetTaskRequest">
+    <wsdl:part name="parameters" element="tns:GetTask"/>
+  </wsdl:message>
+  <wsdl:message name="GetTaskRequest_Headers">
+    <wsdl:part xmlns:q55="urn:api.ecm.opentext.com" name="OTAuthentication" element="q55:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetTaskResponse">
+    <wsdl:part name="parameters" element="tns:GetTaskResponse"/>
+  </wsdl:message>
+  <wsdl:message name="GetTaskResponse_Headers">
+    <wsdl:part xmlns:q56="urn:api.ecm.opentext.com" name="OTAuthentication" element="q56:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetTaskGroupRequest">
+    <wsdl:part name="parameters" element="tns:GetTaskGroup"/>
+  </wsdl:message>
+  <wsdl:message name="GetTaskGroupRequest_Headers">
+    <wsdl:part xmlns:q57="urn:api.ecm.opentext.com" name="OTAuthentication" element="q57:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetTaskGroupResponse">
+    <wsdl:part name="parameters" element="tns:GetTaskGroupResponse"/>
+  </wsdl:message>
+  <wsdl:message name="GetTaskGroupResponse_Headers">
+    <wsdl:part xmlns:q58="urn:api.ecm.opentext.com" name="OTAuthentication" element="q58:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetTaskListRequest">
+    <wsdl:part name="parameters" element="tns:GetTaskList"/>
+  </wsdl:message>
+  <wsdl:message name="GetTaskListRequest_Headers">
+    <wsdl:part xmlns:q59="urn:api.ecm.opentext.com" name="OTAuthentication" element="q59:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetTaskListResponse">
+    <wsdl:part name="parameters" element="tns:GetTaskListResponse"/>
+  </wsdl:message>
+  <wsdl:message name="GetTaskListResponse_Headers">
+    <wsdl:part xmlns:q60="urn:api.ecm.opentext.com" name="OTAuthentication" element="q60:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetTopicByNameRequest">
+    <wsdl:part name="parameters" element="tns:GetTopicByName"/>
+  </wsdl:message>
+  <wsdl:message name="GetTopicByNameRequest_Headers">
+    <wsdl:part xmlns:q61="urn:api.ecm.opentext.com" name="OTAuthentication" element="q61:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetTopicByNameResponse">
+    <wsdl:part name="parameters" element="tns:GetTopicByNameResponse"/>
+  </wsdl:message>
+  <wsdl:message name="GetTopicByNameResponse_Headers">
+    <wsdl:part xmlns:q62="urn:api.ecm.opentext.com" name="OTAuthentication" element="q62:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetTopicReplyRequest">
+    <wsdl:part name="parameters" element="tns:GetTopicReply"/>
+  </wsdl:message>
+  <wsdl:message name="GetTopicReplyRequest_Headers">
+    <wsdl:part xmlns:q63="urn:api.ecm.opentext.com" name="OTAuthentication" element="q63:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetTopicReplyResponse">
+    <wsdl:part name="parameters" element="tns:GetTopicReplyResponse"/>
+  </wsdl:message>
+  <wsdl:message name="GetTopicReplyResponse_Headers">
+    <wsdl:part xmlns:q64="urn:api.ecm.opentext.com" name="OTAuthentication" element="q64:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetUnreadInfoRequest">
+    <wsdl:part name="parameters" element="tns:GetUnreadInfo"/>
+  </wsdl:message>
+  <wsdl:message name="GetUnreadInfoRequest_Headers">
+    <wsdl:part xmlns:q65="urn:api.ecm.opentext.com" name="OTAuthentication" element="q65:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="GetUnreadInfoResponse">
+    <wsdl:part name="parameters" element="tns:GetUnreadInfoResponse"/>
+  </wsdl:message>
+  <wsdl:message name="GetUnreadInfoResponse_Headers">
+    <wsdl:part xmlns:q66="urn:api.ecm.opentext.com" name="OTAuthentication" element="q66:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="ListMilestonesRequest">
+    <wsdl:part name="parameters" element="tns:ListMilestones"/>
+  </wsdl:message>
+  <wsdl:message name="ListMilestonesRequest_Headers">
+    <wsdl:part xmlns:q67="urn:api.ecm.opentext.com" name="OTAuthentication" element="q67:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="ListMilestonesResponse">
+    <wsdl:part name="parameters" element="tns:ListMilestonesResponse"/>
+  </wsdl:message>
+  <wsdl:message name="ListMilestonesResponse_Headers">
+    <wsdl:part xmlns:q68="urn:api.ecm.opentext.com" name="OTAuthentication" element="q68:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="ListNewsRequest">
+    <wsdl:part name="parameters" element="tns:ListNews"/>
+  </wsdl:message>
+  <wsdl:message name="ListNewsRequest_Headers">
+    <wsdl:part xmlns:q69="urn:api.ecm.opentext.com" name="OTAuthentication" element="q69:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="ListNewsResponse">
+    <wsdl:part name="parameters" element="tns:ListNewsResponse"/>
+  </wsdl:message>
+  <wsdl:message name="ListNewsResponse_Headers">
+    <wsdl:part xmlns:q70="urn:api.ecm.opentext.com" name="OTAuthentication" element="q70:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="ListRepliesRequest">
+    <wsdl:part name="parameters" element="tns:ListReplies"/>
+  </wsdl:message>
+  <wsdl:message name="ListRepliesRequest_Headers">
+    <wsdl:part xmlns:q71="urn:api.ecm.opentext.com" name="OTAuthentication" element="q71:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="ListRepliesResponse">
+    <wsdl:part name="parameters" element="tns:ListRepliesResponse"/>
+  </wsdl:message>
+  <wsdl:message name="ListRepliesResponse_Headers">
+    <wsdl:part xmlns:q72="urn:api.ecm.opentext.com" name="OTAuthentication" element="q72:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="ListTaskGroupsRequest">
+    <wsdl:part name="parameters" element="tns:ListTaskGroups"/>
+  </wsdl:message>
+  <wsdl:message name="ListTaskGroupsRequest_Headers">
+    <wsdl:part xmlns:q73="urn:api.ecm.opentext.com" name="OTAuthentication" element="q73:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="ListTaskGroupsResponse">
+    <wsdl:part name="parameters" element="tns:ListTaskGroupsResponse"/>
+  </wsdl:message>
+  <wsdl:message name="ListTaskGroupsResponse_Headers">
+    <wsdl:part xmlns:q74="urn:api.ecm.opentext.com" name="OTAuthentication" element="q74:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="ListTasksRequest">
+    <wsdl:part name="parameters" element="tns:ListTasks"/>
+  </wsdl:message>
+  <wsdl:message name="ListTasksRequest_Headers">
+    <wsdl:part xmlns:q75="urn:api.ecm.opentext.com" name="OTAuthentication" element="q75:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="ListTasksResponse">
+    <wsdl:part name="parameters" element="tns:ListTasksResponse"/>
+  </wsdl:message>
+  <wsdl:message name="ListTasksResponse_Headers">
+    <wsdl:part xmlns:q76="urn:api.ecm.opentext.com" name="OTAuthentication" element="q76:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="ListTopicsRequest">
+    <wsdl:part name="parameters" element="tns:ListTopics"/>
+  </wsdl:message>
+  <wsdl:message name="ListTopicsRequest_Headers">
+    <wsdl:part xmlns:q77="urn:api.ecm.opentext.com" name="OTAuthentication" element="q77:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="ListTopicsResponse">
+    <wsdl:part name="parameters" element="tns:ListTopicsResponse"/>
+  </wsdl:message>
+  <wsdl:message name="ListTopicsResponse_Headers">
+    <wsdl:part xmlns:q78="urn:api.ecm.opentext.com" name="OTAuthentication" element="q78:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="PostReplyRequest">
+    <wsdl:part name="parameters" element="tns:PostReply"/>
+  </wsdl:message>
+  <wsdl:message name="PostReplyRequest_Headers">
+    <wsdl:part xmlns:q79="urn:api.ecm.opentext.com" name="OTAuthentication" element="q79:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="PostReplyResponse">
+    <wsdl:part name="parameters" element="tns:PostReplyResponse"/>
+  </wsdl:message>
+  <wsdl:message name="PostReplyResponse_Headers">
+    <wsdl:part xmlns:q80="urn:api.ecm.opentext.com" name="OTAuthentication" element="q80:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="PostTopicRequest">
+    <wsdl:part name="parameters" element="tns:PostTopic"/>
+  </wsdl:message>
+  <wsdl:message name="PostTopicRequest_Headers">
+    <wsdl:part xmlns:q81="urn:api.ecm.opentext.com" name="OTAuthentication" element="q81:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="PostTopicResponse">
+    <wsdl:part name="parameters" element="tns:PostTopicResponse"/>
+  </wsdl:message>
+  <wsdl:message name="PostTopicResponse_Headers">
+    <wsdl:part xmlns:q82="urn:api.ecm.opentext.com" name="OTAuthentication" element="q82:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="SetReadListRequest">
+    <wsdl:part name="parameters" element="tns:SetReadList"/>
+  </wsdl:message>
+  <wsdl:message name="SetReadListRequest_Headers">
+    <wsdl:part xmlns:q83="urn:api.ecm.opentext.com" name="OTAuthentication" element="q83:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:message name="SetReadListResponse">
+    <wsdl:part name="parameters" element="tns:SetReadListResponse"/>
+  </wsdl:message>
+  <wsdl:message name="SetReadListResponse_Headers">
+    <wsdl:part xmlns:q84="urn:api.ecm.opentext.com" name="OTAuthentication" element="q84:OTAuthentication"/>
+  </wsdl:message>
+  <wsdl:portType name="Collaboration">
+    <wsdl:operation name="UpdateMilestone">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/UpdateMilestone" name="UpdateMilestoneRequest" message="tns:UpdateMilestoneRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/UpdateMilestoneResponse" name="UpdateMilestoneResponse" message="tns:UpdateMilestoneResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="UpdateNews">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/UpdateNews" name="UpdateNewsRequest" message="tns:UpdateNewsRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/UpdateNewsResponse" name="UpdateNewsResponse" message="tns:UpdateNewsResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="UpdateProject">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/UpdateProject" name="UpdateProjectRequest" message="tns:UpdateProjectRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/UpdateProjectResponse" name="UpdateProjectResponse" message="tns:UpdateProjectResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="UpdateProjectParticipants">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/UpdateProjectParticipants" name="UpdateProjectParticipantsRequest" message="tns:UpdateProjectParticipantsRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/UpdateProjectParticipantsResponse" name="UpdateProjectParticipantsResponse" message="tns:UpdateProjectParticipantsResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="UpdateTask">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/UpdateTask" name="UpdateTaskRequest" message="tns:UpdateTaskRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/UpdateTaskResponse" name="UpdateTaskResponse" message="tns:UpdateTaskResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="UpdateTaskGroup">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/UpdateTaskGroup" name="UpdateTaskGroupRequest" message="tns:UpdateTaskGroupRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/UpdateTaskGroupResponse" name="UpdateTaskGroupResponse" message="tns:UpdateTaskGroupResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="CreateChannel">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/CreateChannel" name="CreateChannelRequest" message="tns:CreateChannelRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/CreateChannelResponse" name="CreateChannelResponse" message="tns:CreateChannelResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="CreateDiscussion">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/CreateDiscussion" name="CreateDiscussionRequest" message="tns:CreateDiscussionRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/CreateDiscussionResponse" name="CreateDiscussionResponse" message="tns:CreateDiscussionResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="CreateMilestone">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/CreateMilestone" name="CreateMilestoneRequest" message="tns:CreateMilestoneRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/CreateMilestoneResponse" name="CreateMilestoneResponse" message="tns:CreateMilestoneResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="CreateNews">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/CreateNews" name="CreateNewsRequest" message="tns:CreateNewsRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/CreateNewsResponse" name="CreateNewsResponse" message="tns:CreateNewsResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="CreateProject">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/CreateProject" name="CreateProjectRequest" message="tns:CreateProjectRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/CreateProjectResponse" name="CreateProjectResponse" message="tns:CreateProjectResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="CreateTask">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/CreateTask" name="CreateTaskRequest" message="tns:CreateTaskRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/CreateTaskResponse" name="CreateTaskResponse" message="tns:CreateTaskResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="CreateTaskGroup">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/CreateTaskGroup" name="CreateTaskGroupRequest" message="tns:CreateTaskGroupRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/CreateTaskGroupResponse" name="CreateTaskGroupResponse" message="tns:CreateTaskGroupResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="CreateTaskList">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/CreateTaskList" name="CreateTaskListRequest" message="tns:CreateTaskListRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/CreateTaskListResponse" name="CreateTaskListResponse" message="tns:CreateTaskListResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="GetChannel">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/GetChannel" name="GetChannelRequest" message="tns:GetChannelRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/GetChannelResponse" name="GetChannelResponse" message="tns:GetChannelResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="GetDiscussion">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/GetDiscussion" name="GetDiscussionRequest" message="tns:GetDiscussionRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/GetDiscussionResponse" name="GetDiscussionResponse" message="tns:GetDiscussionResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="GetMilestone">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/GetMilestone" name="GetMilestoneRequest" message="tns:GetMilestoneRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/GetMilestoneResponse" name="GetMilestoneResponse" message="tns:GetMilestoneResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="GetMyAssignments">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/GetMyAssignments" name="GetMyAssignmentsRequest" message="tns:GetMyAssignmentsRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/GetMyAssignmentsResponse" name="GetMyAssignmentsResponse" message="tns:GetMyAssignmentsResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="GetMyChannels">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/GetMyChannels" name="GetMyChannelsRequest" message="tns:GetMyChannelsRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/GetMyChannelsResponse" name="GetMyChannelsResponse" message="tns:GetMyChannelsResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="GetMyDiscussions">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/GetMyDiscussions" name="GetMyDiscussionsRequest" message="tns:GetMyDiscussionsRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/GetMyDiscussionsResponse" name="GetMyDiscussionsResponse" message="tns:GetMyDiscussionsResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="GetMyProjects">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/GetMyProjects" name="GetMyProjectsRequest" message="tns:GetMyProjectsRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/GetMyProjectsResponse" name="GetMyProjectsResponse" message="tns:GetMyProjectsResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="GetMyTaskLists">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/GetMyTaskLists" name="GetMyTaskListsRequest" message="tns:GetMyTaskListsRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/GetMyTaskListsResponse" name="GetMyTaskListsResponse" message="tns:GetMyTaskListsResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="GetNews">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/GetNews" name="GetNewsRequest" message="tns:GetNewsRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/GetNewsResponse" name="GetNewsResponse" message="tns:GetNewsResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="GetParticipants">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/GetParticipants" name="GetParticipantsRequest" message="tns:GetParticipantsRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/GetParticipantsResponse" name="GetParticipantsResponse" message="tns:GetParticipantsResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="GetProject">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/GetProject" name="GetProjectRequest" message="tns:GetProjectRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/GetProjectResponse" name="GetProjectResponse" message="tns:GetProjectResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="GetReadList">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/GetReadList" name="GetReadListRequest" message="tns:GetReadListRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/GetReadListResponse" name="GetReadListResponse" message="tns:GetReadListResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="GetReplyByName">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/GetReplyByName" name="GetReplyByNameRequest" message="tns:GetReplyByNameRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/GetReplyByNameResponse" name="GetReplyByNameResponse" message="tns:GetReplyByNameResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="GetTask">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/GetTask" name="GetTaskRequest" message="tns:GetTaskRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/GetTaskResponse" name="GetTaskResponse" message="tns:GetTaskResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="GetTaskGroup">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/GetTaskGroup" name="GetTaskGroupRequest" message="tns:GetTaskGroupRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/GetTaskGroupResponse" name="GetTaskGroupResponse" message="tns:GetTaskGroupResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="GetTaskList">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/GetTaskList" name="GetTaskListRequest" message="tns:GetTaskListRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/GetTaskListResponse" name="GetTaskListResponse" message="tns:GetTaskListResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="GetTopicByName">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/GetTopicByName" name="GetTopicByNameRequest" message="tns:GetTopicByNameRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/GetTopicByNameResponse" name="GetTopicByNameResponse" message="tns:GetTopicByNameResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="GetTopicReply">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/GetTopicReply" name="GetTopicReplyRequest" message="tns:GetTopicReplyRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/GetTopicReplyResponse" name="GetTopicReplyResponse" message="tns:GetTopicReplyResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="GetUnreadInfo">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/GetUnreadInfo" name="GetUnreadInfoRequest" message="tns:GetUnreadInfoRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/GetUnreadInfoResponse" name="GetUnreadInfoResponse" message="tns:GetUnreadInfoResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="ListMilestones">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/ListMilestones" name="ListMilestonesRequest" message="tns:ListMilestonesRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/ListMilestonesResponse" name="ListMilestonesResponse" message="tns:ListMilestonesResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="ListNews">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/ListNews" name="ListNewsRequest" message="tns:ListNewsRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/ListNewsResponse" name="ListNewsResponse" message="tns:ListNewsResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="ListReplies">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/ListReplies" name="ListRepliesRequest" message="tns:ListRepliesRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/ListRepliesResponse" name="ListRepliesResponse" message="tns:ListRepliesResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="ListTaskGroups">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/ListTaskGroups" name="ListTaskGroupsRequest" message="tns:ListTaskGroupsRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/ListTaskGroupsResponse" name="ListTaskGroupsResponse" message="tns:ListTaskGroupsResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="ListTasks">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/ListTasks" name="ListTasksRequest" message="tns:ListTasksRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/ListTasksResponse" name="ListTasksResponse" message="tns:ListTasksResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="ListTopics">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/ListTopics" name="ListTopicsRequest" message="tns:ListTopicsRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/ListTopicsResponse" name="ListTopicsResponse" message="tns:ListTopicsResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="PostReply">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/PostReply" name="PostReplyRequest" message="tns:PostReplyRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/PostReplyResponse" name="PostReplyResponse" message="tns:PostReplyResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="PostTopic">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/PostTopic" name="PostTopicRequest" message="tns:PostTopicRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/PostTopicResponse" name="PostTopicResponse" message="tns:PostTopicResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="SetReadList">
+      <wsdl:input wsaw:Action="urn:Collaboration.service.livelink.opentext.com/SetReadList" name="SetReadListRequest" message="tns:SetReadListRequest"/>
+      <wsdl:output wsaw:Action="urn:Collaboration.service.livelink.opentext.com/Collaboration/SetReadListResponse" name="SetReadListResponse" message="tns:SetReadListResponse"/>
+    </wsdl:operation>
+  </wsdl:portType>
+  <wsdl:binding name="BasicHttpBinding_Collaboration" type="tns:Collaboration">
+    <soap:binding transport="http://schemas.xmlsoap.org/soap/http"/>
+    <wsdl:operation name="UpdateMilestone">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/UpdateMilestone" style="document"/>
+      <wsdl:input name="UpdateMilestoneRequest">
+        <soap:header message="tns:UpdateMilestoneRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="UpdateMilestoneResponse">
+        <soap:header message="tns:UpdateMilestoneResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="UpdateNews">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/UpdateNews" style="document"/>
+      <wsdl:input name="UpdateNewsRequest">
+        <soap:header message="tns:UpdateNewsRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="UpdateNewsResponse">
+        <soap:header message="tns:UpdateNewsResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="UpdateProject">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/UpdateProject" style="document"/>
+      <wsdl:input name="UpdateProjectRequest">
+        <soap:header message="tns:UpdateProjectRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="UpdateProjectResponse">
+        <soap:header message="tns:UpdateProjectResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="UpdateProjectParticipants">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/UpdateProjectParticipants" style="document"/>
+      <wsdl:input name="UpdateProjectParticipantsRequest">
+        <soap:header message="tns:UpdateProjectParticipantsRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="UpdateProjectParticipantsResponse">
+        <soap:header message="tns:UpdateProjectParticipantsResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="UpdateTask">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/UpdateTask" style="document"/>
+      <wsdl:input name="UpdateTaskRequest">
+        <soap:header message="tns:UpdateTaskRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="UpdateTaskResponse">
+        <soap:header message="tns:UpdateTaskResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="UpdateTaskGroup">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/UpdateTaskGroup" style="document"/>
+      <wsdl:input name="UpdateTaskGroupRequest">
+        <soap:header message="tns:UpdateTaskGroupRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="UpdateTaskGroupResponse">
+        <soap:header message="tns:UpdateTaskGroupResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="CreateChannel">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/CreateChannel" style="document"/>
+      <wsdl:input name="CreateChannelRequest">
+        <soap:header message="tns:CreateChannelRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="CreateChannelResponse">
+        <soap:header message="tns:CreateChannelResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="CreateDiscussion">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/CreateDiscussion" style="document"/>
+      <wsdl:input name="CreateDiscussionRequest">
+        <soap:header message="tns:CreateDiscussionRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="CreateDiscussionResponse">
+        <soap:header message="tns:CreateDiscussionResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="CreateMilestone">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/CreateMilestone" style="document"/>
+      <wsdl:input name="CreateMilestoneRequest">
+        <soap:header message="tns:CreateMilestoneRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="CreateMilestoneResponse">
+        <soap:header message="tns:CreateMilestoneResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="CreateNews">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/CreateNews" style="document"/>
+      <wsdl:input name="CreateNewsRequest">
+        <soap:header message="tns:CreateNewsRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="CreateNewsResponse">
+        <soap:header message="tns:CreateNewsResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="CreateProject">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/CreateProject" style="document"/>
+      <wsdl:input name="CreateProjectRequest">
+        <soap:header message="tns:CreateProjectRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="CreateProjectResponse">
+        <soap:header message="tns:CreateProjectResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="CreateTask">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/CreateTask" style="document"/>
+      <wsdl:input name="CreateTaskRequest">
+        <soap:header message="tns:CreateTaskRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="CreateTaskResponse">
+        <soap:header message="tns:CreateTaskResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="CreateTaskGroup">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/CreateTaskGroup" style="document"/>
+      <wsdl:input name="CreateTaskGroupRequest">
+        <soap:header message="tns:CreateTaskGroupRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="CreateTaskGroupResponse">
+        <soap:header message="tns:CreateTaskGroupResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="CreateTaskList">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/CreateTaskList" style="document"/>
+      <wsdl:input name="CreateTaskListRequest">
+        <soap:header message="tns:CreateTaskListRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="CreateTaskListResponse">
+        <soap:header message="tns:CreateTaskListResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="GetChannel">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/GetChannel" style="document"/>
+      <wsdl:input name="GetChannelRequest">
+        <soap:header message="tns:GetChannelRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="GetChannelResponse">
+        <soap:header message="tns:GetChannelResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="GetDiscussion">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/GetDiscussion" style="document"/>
+      <wsdl:input name="GetDiscussionRequest">
+        <soap:header message="tns:GetDiscussionRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="GetDiscussionResponse">
+        <soap:header message="tns:GetDiscussionResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="GetMilestone">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/GetMilestone" style="document"/>
+      <wsdl:input name="GetMilestoneRequest">
+        <soap:header message="tns:GetMilestoneRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="GetMilestoneResponse">
+        <soap:header message="tns:GetMilestoneResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="GetMyAssignments">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/GetMyAssignments" style="document"/>
+      <wsdl:input name="GetMyAssignmentsRequest">
+        <soap:header message="tns:GetMyAssignmentsRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="GetMyAssignmentsResponse">
+        <soap:header message="tns:GetMyAssignmentsResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="GetMyChannels">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/GetMyChannels" style="document"/>
+      <wsdl:input name="GetMyChannelsRequest">
+        <soap:header message="tns:GetMyChannelsRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="GetMyChannelsResponse">
+        <soap:header message="tns:GetMyChannelsResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="GetMyDiscussions">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/GetMyDiscussions" style="document"/>
+      <wsdl:input name="GetMyDiscussionsRequest">
+        <soap:header message="tns:GetMyDiscussionsRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="GetMyDiscussionsResponse">
+        <soap:header message="tns:GetMyDiscussionsResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="GetMyProjects">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/GetMyProjects" style="document"/>
+      <wsdl:input name="GetMyProjectsRequest">
+        <soap:header message="tns:GetMyProjectsRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="GetMyProjectsResponse">
+        <soap:header message="tns:GetMyProjectsResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="GetMyTaskLists">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/GetMyTaskLists" style="document"/>
+      <wsdl:input name="GetMyTaskListsRequest">
+        <soap:header message="tns:GetMyTaskListsRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="GetMyTaskListsResponse">
+        <soap:header message="tns:GetMyTaskListsResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="GetNews">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/GetNews" style="document"/>
+      <wsdl:input name="GetNewsRequest">
+        <soap:header message="tns:GetNewsRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="GetNewsResponse">
+        <soap:header message="tns:GetNewsResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="GetParticipants">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/GetParticipants" style="document"/>
+      <wsdl:input name="GetParticipantsRequest">
+        <soap:header message="tns:GetParticipantsRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="GetParticipantsResponse">
+        <soap:header message="tns:GetParticipantsResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="GetProject">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/GetProject" style="document"/>
+      <wsdl:input name="GetProjectRequest">
+        <soap:header message="tns:GetProjectRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="GetProjectResponse">
+        <soap:header message="tns:GetProjectResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="GetReadList">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/GetReadList" style="document"/>
+      <wsdl:input name="GetReadListRequest">
+        <soap:header message="tns:GetReadListRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="GetReadListResponse">
+        <soap:header message="tns:GetReadListResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="GetReplyByName">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/GetReplyByName" style="document"/>
+      <wsdl:input name="GetReplyByNameRequest">
+        <soap:header message="tns:GetReplyByNameRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="GetReplyByNameResponse">
+        <soap:header message="tns:GetReplyByNameResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="GetTask">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/GetTask" style="document"/>
+      <wsdl:input name="GetTaskRequest">
+        <soap:header message="tns:GetTaskRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="GetTaskResponse">
+        <soap:header message="tns:GetTaskResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="GetTaskGroup">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/GetTaskGroup" style="document"/>
+      <wsdl:input name="GetTaskGroupRequest">
+        <soap:header message="tns:GetTaskGroupRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="GetTaskGroupResponse">
+        <soap:header message="tns:GetTaskGroupResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="GetTaskList">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/GetTaskList" style="document"/>
+      <wsdl:input name="GetTaskListRequest">
+        <soap:header message="tns:GetTaskListRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="GetTaskListResponse">
+        <soap:header message="tns:GetTaskListResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="GetTopicByName">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/GetTopicByName" style="document"/>
+      <wsdl:input name="GetTopicByNameRequest">
+        <soap:header message="tns:GetTopicByNameRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="GetTopicByNameResponse">
+        <soap:header message="tns:GetTopicByNameResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="GetTopicReply">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/GetTopicReply" style="document"/>
+      <wsdl:input name="GetTopicReplyRequest">
+        <soap:header message="tns:GetTopicReplyRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="GetTopicReplyResponse">
+        <soap:header message="tns:GetTopicReplyResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="GetUnreadInfo">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/GetUnreadInfo" style="document"/>
+      <wsdl:input name="GetUnreadInfoRequest">
+        <soap:header message="tns:GetUnreadInfoRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="GetUnreadInfoResponse">
+        <soap:header message="tns:GetUnreadInfoResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="ListMilestones">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/ListMilestones" style="document"/>
+      <wsdl:input name="ListMilestonesRequest">
+        <soap:header message="tns:ListMilestonesRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="ListMilestonesResponse">
+        <soap:header message="tns:ListMilestonesResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="ListNews">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/ListNews" style="document"/>
+      <wsdl:input name="ListNewsRequest">
+        <soap:header message="tns:ListNewsRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="ListNewsResponse">
+        <soap:header message="tns:ListNewsResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="ListReplies">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/ListReplies" style="document"/>
+      <wsdl:input name="ListRepliesRequest">
+        <soap:header message="tns:ListRepliesRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="ListRepliesResponse">
+        <soap:header message="tns:ListRepliesResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="ListTaskGroups">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/ListTaskGroups" style="document"/>
+      <wsdl:input name="ListTaskGroupsRequest">
+        <soap:header message="tns:ListTaskGroupsRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="ListTaskGroupsResponse">
+        <soap:header message="tns:ListTaskGroupsResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="ListTasks">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/ListTasks" style="document"/>
+      <wsdl:input name="ListTasksRequest">
+        <soap:header message="tns:ListTasksRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="ListTasksResponse">
+        <soap:header message="tns:ListTasksResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="ListTopics">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/ListTopics" style="document"/>
+      <wsdl:input name="ListTopicsRequest">
+        <soap:header message="tns:ListTopicsRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="ListTopicsResponse">
+        <soap:header message="tns:ListTopicsResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="PostReply">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/PostReply" style="document"/>
+      <wsdl:input name="PostReplyRequest">
+        <soap:header message="tns:PostReplyRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="PostReplyResponse">
+        <soap:header message="tns:PostReplyResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="PostTopic">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/PostTopic" style="document"/>
+      <wsdl:input name="PostTopicRequest">
+        <soap:header message="tns:PostTopicRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="PostTopicResponse">
+        <soap:header message="tns:PostTopicResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="SetReadList">
+      <soap:operation soapAction="urn:Collaboration.service.livelink.opentext.com/SetReadList" style="document"/>
+      <wsdl:input name="SetReadListRequest">
+        <soap:header message="tns:SetReadListRequest_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output name="SetReadListResponse">
+        <soap:header message="tns:SetReadListResponse_Headers" part="OTAuthentication" use="literal"/>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+  </wsdl:binding>
+  <wsdl:service name="Collaboration">
+    <wsdl:port name="BasicHttpBinding_Collaboration" binding="tns:BasicHttpBinding_Collaboration">
+      <soap:address location="http://example.com/cws/services/Collaboration"/>
+    </wsdl:port>
+  </wsdl:service>
+</wsdl:definitions>

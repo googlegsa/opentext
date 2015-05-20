@@ -30,6 +30,15 @@ import com.google.enterprise.adaptor.InvalidConfigurationException;
 import com.google.enterprise.adaptor.Request;
 import com.google.enterprise.adaptor.Response;
 
+import com.opentext.livelink.service.collaboration.Collaboration;
+import com.opentext.livelink.service.collaboration.DiscussionItem;
+import com.opentext.livelink.service.collaboration.MilestoneInfo;
+import com.opentext.livelink.service.collaboration.NewsInfo;
+import com.opentext.livelink.service.collaboration.ProjectInfo;
+import com.opentext.livelink.service.collaboration.ProjectStatus;
+import com.opentext.livelink.service.collaboration.TaskInfo;
+import com.opentext.livelink.service.collaboration.TaskPriority;
+import com.opentext.livelink.service.collaboration.TaskStatus;
 import com.opentext.livelink.service.core.Authentication;
 import com.opentext.livelink.service.core.BooleanValue;
 import com.opentext.livelink.service.core.ContentService;
@@ -287,8 +296,7 @@ public class OpentextAdaptorTest {
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
     List<String> excludedNodeTypes = adaptor.getExcludedNodeTypes();
-    assertEquals(2, excludedNodeTypes.size());
-    assertEquals(Lists.newArrayList("Alias", "URL"), excludedNodeTypes);
+    assertEquals(0, excludedNodeTypes.size());
   }
 
   @Test
@@ -448,6 +456,24 @@ public class OpentextAdaptorTest {
   }
 
   @Test
+  public void testGetChildDocId() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+
+    OpentextDocId parentOpentextDocId =
+        new OpentextDocId(new DocId("456:456"));
+    DocId childDocId =
+        adaptor.getChildDocId(parentOpentextDocId, "Child Name", 123);
+    assertEquals("456/Child+Name:123", childDocId.getUniqueId());
+    parentOpentextDocId =
+        new OpentextDocId(new DocId("EnterpriseWS/Folder/Container/Doc:678"));
+    childDocId =
+        adaptor.getChildDocId(parentOpentextDocId, "Child Name", 123);
+    assertEquals("EnterpriseWS/Folder/Container/Doc/Child+Name:123",
+        childDocId.getUniqueId());
+  }
+
+  @Test
   public void testDoContainer() throws IOException {
     SoapFactoryMock soapFactory = new SoapFactoryMock();
 
@@ -497,6 +523,7 @@ public class OpentextAdaptorTest {
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
+    config.addKey("opentext.displayUrl.objAction.111", "actionFor111");
     adaptor.init(context);
 
     URI displayUrl = adaptor.getDisplayUrl("Document", 12345);
@@ -506,6 +533,10 @@ public class OpentextAdaptorTest {
     displayUrl = adaptor.getDisplayUrl("UnknownType", 12345);
     assertEquals("http://example.com/otcs/livelink.exe" +
         "?func=ll&objAction=properties&objId=12345", displayUrl.toString());
+
+    displayUrl = adaptor.getDisplayUrl("GenericNode:111", 12345);
+    assertEquals("http://example.com/otcs/livelink.exe" +
+        "?func=ll&objAction=actionFor111&objId=12345", displayUrl.toString());
   }
 
   @Test
@@ -514,12 +545,17 @@ public class OpentextAdaptorTest {
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
-    config.overrideKey(
+    config.addKey(
         "opentext.displayUrl.queryString.Document", "/open/{1}");
+    config.addKey(
+        "opentext.displayUrl.queryString.111", "/open111/{1}");
     adaptor.init(context);
 
     URI displayUrl = adaptor.getDisplayUrl("Document", 12345);
     assertEquals("http://example.com/otcs/livelink.exe/open/12345",
+        displayUrl.toString());
+    displayUrl = adaptor.getDisplayUrl("GenericNode:111", 12345);
+    assertEquals("http://example.com/otcs/livelink.exe/open111/12345",
         displayUrl.toString());
   }
 
@@ -599,6 +635,7 @@ public class OpentextAdaptorTest {
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.excludedNodeTypes", "Alias");
     adaptor.init(context);
 
     ResponseMock responseMock = new ResponseMock();
@@ -1049,6 +1086,20 @@ public class OpentextAdaptorTest {
   }
 
   @Test
+  public void testFixTypeKeys() {
+    Map<String, String> original = new HashMap<String, String>();
+    original.put("Document", "document value");
+    original.put("123", "123 value");
+    original.put("GenericNode:456", "456 value");
+    Map<String, String> result = OpentextAdaptor.fixTypeKeys(original);
+    assertEquals(original.size(), result.size());
+    assertNull(result.get("123"));
+    assertEquals("123 value", result.get("GenericNode:123"));
+    assertEquals("document value", result.get("Document"));
+    assertEquals("456 value", result.get("GenericNode:456"));
+  }
+
+  @Test
   public void testGetCanonicalType() {
     assertNull(OpentextAdaptor.getCanonicalType(null));
     assertEquals("TextType", OpentextAdaptor.getCanonicalType("TextType"));
@@ -1174,17 +1225,590 @@ public class OpentextAdaptorTest {
     assertEquals("04 01, 2013", responseMetadata.get("ModifyDate").get(0));
   }
 
+  @Test
+  public void testDoNode() throws IOException {
+    NodeMock node = new NodeMock(432, "Test Node");
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doNode(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("432:432")),
+        node,
+        Proxies.newProxyInstance(Response.class, responseMock));
+    String expected = "<!DOCTYPE html>\n"
+        + "<html><head><title>Test Node</title></head>"
+        + "<body><h1>Test Node</h1>"
+        + "</body></html>";
+    assertEquals(expected,
+        responseMock.outputStream.toString("UTF-8"));
+  }
+
+  @Test
+  public void testDoCollection() throws IOException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    NodeMock containerNode =
+        new NodeMock(3000, "CollectionName", "Collection");
+    containerNode.setStartPointId(2000);
+    containerNode.setPath("CollectionName");
+    soapFactory.documentManagementMock.addNode(containerNode);
+    for (int i = 1; i <= 3; i++) {
+      NodeMock testNode = new NodeMock(4000 + i, "Document " + i);
+      testNode.setStartPointId(2000);
+      testNode.setPath("CollectionName", "Document " + i);
+      soapFactory.documentManagementMock.addNode(testNode);
+    }
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doCollection(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/CollectionName:3000")),
+        containerNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
+    String expected = "<!DOCTYPE html>\n"
+        + "<html><head><title>CollectionName</title></head>"
+        + "<body><h1>CollectionName</h1>"
+        + "<p>Document 1</p>"
+        + "<p>Document 2</p>"
+        + "<p>Document 3</p>"
+        + "</body></html>";
+    assertEquals(expected,
+        responseMock.outputStream.toString("UTF-8"));
+  }
+
+  @Test
+  public void testDoCollectionErrorGettingContents() throws IOException {
+    class DocumentManagementMockError extends DocumentManagementMock {
+      public List<Node> listNodes(long containerNodeId, boolean partialData) {
+        throw getSoapFaultException("error retrieving child nodes",
+            "uri", "local", "prefix");
+      }
+    };
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    NodeMock containerNode =
+        new NodeMock(3000, "CollectionName", "Collection");
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doCollection(
+        soapFactory.newDocumentManagement(new DocumentManagementMockError()),
+        new OpentextDocId(new DocId("2000/Folder:3000")),
+        containerNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
+
+    String expected = "<!DOCTYPE html>\n"
+        + "<html><head><title>CollectionName</title></head>"
+        + "<body><h1>CollectionName</h1>"
+        + "</body></html>";
+    assertEquals(expected,
+        responseMock.outputStream.toString("UTF-8"));
+  }
+
+  @Test
+  public void testDoMilestone() throws IOException {
+    MilestoneInfo milestoneInfo = new MilestoneInfo();
+    milestoneInfo.setID(3000);
+    milestoneInfo.setActualDate(
+        getXmlGregorianCalendar(2011, 01, 01, 01, 01, 01));
+    milestoneInfo.setDuration(45);
+    milestoneInfo.setNumActive(2);
+    milestoneInfo.setNumCancelled(0);
+    milestoneInfo.setNumCompleted(3);
+    milestoneInfo.setNumInprocess(5);
+    milestoneInfo.setNumIssue(2);
+    milestoneInfo.setNumLate(0);
+    milestoneInfo.setNumOnHold(4);
+    milestoneInfo.setNumPending(7);
+    milestoneInfo.setNumTasks(8);
+    milestoneInfo.setOriginalTargetDate(
+        getXmlGregorianCalendar(2012, 01, 01, 01, 01, 01));
+    milestoneInfo.setPercentCancelled(15.0);
+    milestoneInfo.setPercentComplete(55.0);
+    milestoneInfo.setPercentInprocess(32.0);
+    milestoneInfo.setPercentIssue(11.0);
+    milestoneInfo.setPercentLate(4.0);
+    milestoneInfo.setPercentOnHold(45.0);
+    milestoneInfo.setPercentPending(13.0);
+    milestoneInfo.setResources(99);
+    milestoneInfo.setTargetDate(
+        getXmlGregorianCalendar(2013, 01, 01, 01, 01, 01));
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    NodeMock milestoneNode =
+        new NodeMock(3000, "TestMilestone", "Milestone");
+    milestoneNode.setStartPointId(2000);
+    milestoneNode.setPath("TestMilestone");
+    for (int i = 1; i <= 3; i++) {
+      NodeMock testNode = new NodeMock(4000 + i, "Document " + i);
+      testNode.setStartPointId(2000);
+      testNode.setPath("TestMilestone", "Document " + i);
+      soapFactory.documentManagementMock.addNode(testNode);
+    }
+    soapFactory.documentManagementMock.addNode(milestoneNode);
+    soapFactory.collaborationMock.addMilestoneInfo(milestoneInfo);
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doMilestone(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/TestMilestone:3000")),
+        milestoneNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
+    String expected = "<!DOCTYPE html>\n"
+        + "<html><head><title>TestMilestone</title></head>"
+        + "<body><h1>TestMilestone</h1>"
+        + "</body></html>";
+    assertEquals(expected,
+        responseMock.outputStream.toString("UTF-8"));
+    Map<String, List<String>> responseMetadata = responseMock.getMetadata();
+    assertEquals("2011-02-01", responseMetadata.get("ActualDate").get(0));
+    assertEquals("45", responseMetadata.get("Duration").get(0));
+    assertEquals("2", responseMetadata.get("NumActive").get(0));
+    assertEquals("0", responseMetadata.get("NumCancelled").get(0));
+    assertEquals("3", responseMetadata.get("NumCompleted").get(0));
+    assertEquals("5", responseMetadata.get("NumInProcess").get(0));
+    assertEquals("2", responseMetadata.get("NumIssue").get(0));
+    assertEquals("0", responseMetadata.get("NumLate").get(0));
+    assertEquals("4", responseMetadata.get("NumOnHold").get(0));
+    assertEquals("7", responseMetadata.get("NumPending").get(0));
+    assertEquals("8", responseMetadata.get("NumTasks").get(0));
+    assertEquals("2012-02-01",
+        responseMetadata.get("OriginalTargetDate").get(0));
+    assertEquals("15.0", responseMetadata.get("PercentCancelled").get(0));
+    assertEquals("55.0", responseMetadata.get("PercentComplete").get(0));
+    assertEquals("32.0", responseMetadata.get("PercentInProcess").get(0));
+    assertEquals("11.0", responseMetadata.get("PercentIssue").get(0));
+    assertEquals("4.0", responseMetadata.get("PercentLate").get(0));
+    assertEquals("45.0", responseMetadata.get("PercentOnHold").get(0));
+    assertEquals("13.0", responseMetadata.get("PercentPending").get(0));
+    assertEquals("99", responseMetadata.get("Resources").get(0));
+    assertEquals("2013-02-01", responseMetadata.get("TargetDate").get(0));
+    List<String> anchors = responseMock.getAnchors();
+    assertEquals(3, anchors.size());
+    assertEquals(
+        Lists.newArrayList("Document 1", "Document 2", "Document 3"),
+        anchors);
+  }
+
+  @Test
+  public void testDoNews() throws IOException {
+    NewsInfo newsInfo = new NewsInfo();
+    newsInfo.setCreatedBy(new Long(1001));
+    newsInfo.setEffectiveDate(
+        getXmlGregorianCalendar(2013, 01, 01, 01, 01, 01));
+    newsInfo.setExpirationDate(
+        getXmlGregorianCalendar(2013, 01, 11, 01, 01, 01));
+    newsInfo.setHeadline("This Is The Headline");
+    newsInfo.setID(12345);
+    newsInfo.setName("NewsInfoName");
+    newsInfo.setStory("This is the news story.");
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    NodeMock newsNode = new NodeMock(12345, "NewsInfoName", "News");
+    newsNode.setStartPointId(2000);
+    newsNode.setPath("NewsInfoName");
+    for (int i = 1; i <= 3; i++) {
+      NodeMock testNode = new NodeMock(4000 + i, "Document " + i);
+      testNode.setStartPointId(2000);
+      testNode.setPath("NewsInfoName", "Document " + i);
+      soapFactory.documentManagementMock.addNode(testNode);
+    }
+    soapFactory.documentManagementMock.addNode(newsNode);
+    soapFactory.collaborationMock.addNewsInfo(newsInfo);
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doNews(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/News+Info+Name:12345")),
+        newsNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
+    String expected = "<!DOCTYPE html>\n"
+        + "<html><head><title>NewsInfoName</title></head>"
+        + "<body><h1>This Is The Headline</h1>"
+        + "<p>This is the news story.</p>"
+        + "</body></html>";
+    assertEquals(expected,
+        responseMock.outputStream.toString("UTF-8"));
+    Map<String, List<String>> responseMetadata = responseMock.getMetadata();
+    assertEquals("2013-02-01", responseMetadata.get("EffectiveDate").get(0));
+    assertEquals("2013-02-11", responseMetadata.get("ExpirationDate").get(0));
+    List<String> anchors = responseMock.getAnchors();
+    assertEquals(3, anchors.size());
+    assertEquals(
+        Lists.newArrayList("Document 1", "Document 2", "Document 3"),
+        anchors);
+  }
+
+  @Test
+  public void testDoNewsErrorGettingAttachments() throws IOException {
+    class CollaborationMockError extends CollaborationMock {
+      public NewsInfo getNews(long id) {
+        throw getSoapFaultException("error retrieving news info",
+            "uri", "local", "prefix");
+      }
+    };
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.collaborationMock = new CollaborationMockError();
+    NodeMock newsNode = new NodeMock(12345, "NewsName", "News");
+    newsNode.setStartPointId(2000);
+    newsNode.setPath("NewsName");
+    for (int i = 1; i <= 3; i++) {
+      NodeMock testNode = new NodeMock(4000 + i, "Document " + i);
+      testNode.setStartPointId(2000);
+      testNode.setPath("NewsName", "Document " + i);
+      soapFactory.documentManagementMock.addNode(testNode);
+    }
+    soapFactory.documentManagementMock.addNode(newsNode);
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doNews(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/News+Name:12345")),
+        newsNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
+    String expected = "<!DOCTYPE html>\n"
+        + "<html><head><title>Folder 2000/News+Name:12345</title>"
+        + "</head><body><h1>Folder 2000/News+Name:12345</h1>"
+        + "<li><a href=\"2000/News+Name/Document+1:4001\">Document 1</a></li>"
+        + "<li><a href=\"2000/News+Name/Document+2:4002\">Document 2</a></li>"
+        + "<li><a href=\"2000/News+Name/Document+3:4003\">Document 3</a></li>"
+        + "</body></html>";
+    assertEquals(expected,
+        responseMock.outputStream.toString("UTF-8"));
+  }
+
+  @Test
+  public void testDoProject() throws IOException {
+    ProjectInfo projectInfo = new ProjectInfo();
+    projectInfo.setCreatedBy(new Long(1001));
+    projectInfo.setGoals("These are the goals.");
+    projectInfo.setID(3000);
+    projectInfo.setInitiatives("These are the initiatives.");
+    projectInfo.setMission("This is the mission.");
+    projectInfo.setName("ProjectName");
+    projectInfo.setObjectives("These are the objectives.");
+    projectInfo.setPublicAccess(false);
+    projectInfo.setStartDate(
+        getXmlGregorianCalendar(2013, 01, 01, 01, 01, 01));
+    projectInfo.setStatus(ProjectStatus.PENDING);
+    projectInfo.setTargetDate(
+        getXmlGregorianCalendar(2014, 01, 01, 01, 01, 01));
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    NodeMock projectNode = new NodeMock(3000, "ProjectName", "Project");
+    projectNode.setStartPointId(2000);
+    projectNode.setPath("ProjectName");
+    for (int i = 1; i <= 3; i++) {
+      NodeMock testNode = new NodeMock(4000 + i, "Document " + i);
+      testNode.setStartPointId(2000);
+      testNode.setPath("ProjectName", "Document " + i);
+      soapFactory.documentManagementMock.addNode(testNode);
+    }
+    soapFactory.documentManagementMock.addNode(projectNode);
+    soapFactory.collaborationMock.addProjectInfo(projectInfo);
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doProject(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/Project+Name:3000")),
+        projectNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
+    String expected = "<!DOCTYPE html>\n"
+        + "<html><head><title>ProjectName</title></head>"
+        + "<body><h1>ProjectName</h1>"
+        + "</body></html>";
+    assertEquals(expected,
+        responseMock.outputStream.toString("UTF-8"));
+    Map<String, List<String>> responseMetadata = responseMock.getMetadata();
+    assertEquals("2013-02-01", responseMetadata.get("StartDate").get(0));
+    assertEquals("2014-02-01", responseMetadata.get("TargetDate").get(0));
+    assertEquals("These are the goals.",
+        responseMetadata.get("Goals").get(0));
+    assertEquals("These are the initiatives.",
+        responseMetadata.get("Initiatives").get(0));
+    assertEquals("This is the mission.",
+        responseMetadata.get("Mission").get(0));
+    assertEquals("These are the objectives.",
+        responseMetadata.get("Objectives").get(0));
+    assertEquals("PENDING", responseMetadata.get("Status").get(0));
+    List<String> anchors = responseMock.getAnchors();
+    assertEquals(3, anchors.size());
+    assertEquals(
+        Lists.newArrayList("Document 1", "Document 2", "Document 3"),
+        anchors);
+  }
+
+  @Test
+  public void testDoProjectErrorGettingContents() throws IOException {
+    class CollaborationMockError extends CollaborationMock {
+      public ProjectInfo getProject(long id) {
+        throw getSoapFaultException("error retrieving project info",
+            "uri", "local", "prefix");
+      }
+    };
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.collaborationMock = new CollaborationMockError();
+    NodeMock projectNode = new NodeMock(3000, "ProjectName", "Project");
+    projectNode.setStartPointId(2000);
+    projectNode.setPath("ProjectName");
+    for (int i = 1; i <= 3; i++) {
+      NodeMock testNode = new NodeMock(4000 + i, "Document " + i);
+      testNode.setStartPointId(2000);
+      testNode.setPath("ProjectName", "Document " + i);
+      soapFactory.documentManagementMock.addNode(testNode);
+    }
+    soapFactory.documentManagementMock.addNode(projectNode);
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doProject(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/ProjectName:3000")),
+        projectNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
+    String expected = "<!DOCTYPE html>\n"
+        + "<html><head><title>Folder 2000/ProjectName:3000</title>"
+        + "</head><body><h1>Folder 2000/ProjectName:3000</h1>"
+        + "<li><a href=\"2000/ProjectName/Document+1:4001\">"
+        + "Document 1</a></li>"
+        + "<li><a href=\"2000/ProjectName/Document+2:4002\">"
+        + "Document 2</a></li>"
+        + "<li><a href=\"2000/ProjectName/Document+3:4003\">"
+        + "Document 3</a></li>"
+        + "</body></html>";
+    assertEquals(expected,
+        responseMock.outputStream.toString("UTF-8"));
+  }
+
+  @Test
+  public void testDoTopicReply() throws IOException {
+    DiscussionItem discussionItem = new DiscussionItem();
+    discussionItem.setContent("Discussion item content.");
+    discussionItem.setID(3000);
+    discussionItem.setOrdering(3);
+    discussionItem.setPostedBy(1001);
+    discussionItem.setPostedDate(
+        getXmlGregorianCalendar(2013, 01, 01, 01, 01, 01));
+    discussionItem.setSubject("Discussion item subject.");
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    NodeMock discussionNode =
+        new NodeMock(3000, "Discussion item subject.", "Topic");
+    discussionNode.setStartPointId(2000);
+    discussionNode.setPath("Discussion item subject.");
+    for (int i = 1; i <= 3; i++) {
+      NodeMock testNode = new NodeMock(4000 + i, "Document " + i);
+      testNode.setStartPointId(2000);
+      testNode.setPath("Discussion item subject.", "Document " + i);
+      soapFactory.documentManagementMock.addNode(testNode);
+    }
+    // Create the corresponding member.
+    Member member = new Member();
+    member.setID(1001);
+    member.setName("testuser1");
+    soapFactory.memberServiceMock.addMember(member);
+    soapFactory.documentManagementMock.addNode(discussionNode);
+    soapFactory.collaborationMock.addDiscussionItem(discussionItem);
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doTopicReply(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/Project+Name:3000")),
+        discussionNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
+    String expected = "<!DOCTYPE html>\n"
+        + "<html><head><title>Discussion item subject.</title></head>"
+        + "<body><h1>Discussion item subject.</h1>"
+        + "<p>Discussion item content.</p>"
+        + "</body></html>";
+    assertEquals(expected,
+        responseMock.outputStream.toString("UTF-8"));
+    Map<String, List<String>> responseMetadata = responseMock.getMetadata();
+    assertEquals("2013-02-01", responseMetadata.get("PostedDate").get(0));
+    assertEquals("testuser1", responseMetadata.get("PostedBy").get(0));
+    List<String> anchors = responseMock.getAnchors();
+    assertEquals(3, anchors.size());
+    assertEquals(
+        Lists.newArrayList("Document 1", "Document 2", "Document 3"),
+        anchors);
+  }
+
+  @Test
+  public void testDoTopicReplyErrorGettingContents() throws IOException {
+    class CollaborationMockError extends CollaborationMock {
+      public DiscussionItem getTopicReply(long id) {
+        throw getSoapFaultException("error retrieving discussion item",
+            "uri", "local", "prefix");
+      }
+    };
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    NodeMock discussionNode =
+        new NodeMock(3000, "Discussion item subject.", "Topic");
+    discussionNode.setStartPointId(2000);
+    discussionNode.setPath("Discussion item subject.");
+    for (int i = 1; i <= 3; i++) {
+      NodeMock testNode = new NodeMock(4000 + i, "Document " + i);
+      testNode.setStartPointId(2000);
+      testNode.setPath("Discussion item subject.", "Document " + i);
+      soapFactory.documentManagementMock.addNode(testNode);
+    }
+    soapFactory.documentManagementMock.addNode(discussionNode);
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doTopicReply(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/Discussion+item+subject.:3000")),
+        discussionNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
+    String expected = "<!DOCTYPE html>\n"
+        + "<html><head><title>Folder 2000/Discussion+item+subject.:3000"
+        + "</title>"
+        + "</head><body><h1>Folder 2000/Discussion+item+subject.:3000</h1>"
+        + "<li><a href=\"2000/Discussion+item+subject./Document+1:4001\">"
+        + "Document 1</a></li>"
+        + "<li><a href=\"2000/Discussion+item+subject./Document+2:4002\">"
+        + "Document 2</a></li>"
+        + "<li><a href=\"2000/Discussion+item+subject./Document+3:4003\">"
+        + "Document 3</a></li>"
+        + "</body></html>";
+    assertEquals(expected,
+        responseMock.outputStream.toString("UTF-8"));
+  }
+
+  @Test
+  public void testDoTask() throws IOException {
+    TaskInfo taskInfo = new TaskInfo();
+    taskInfo.setAssignedTo(new Long(1001));
+    taskInfo.setComments("These are the comments.");
+    taskInfo.setCompletionDate(
+        getXmlGregorianCalendar(2013, 01, 01, 01, 01, 01));
+    taskInfo.setDateAssigned(
+        getXmlGregorianCalendar(2012, 01, 01, 01, 01, 01));
+    taskInfo.setDueDate(
+        getXmlGregorianCalendar(2014, 01, 01, 01, 01, 01));
+    taskInfo.setID(3000);
+    taskInfo.setInstructions("These are the instructions.");
+    taskInfo.setMilestone(54678);
+    taskInfo.setName("TaskName");
+    taskInfo.setPriority(TaskPriority.LOW);
+    taskInfo.setStartDate(
+        getXmlGregorianCalendar(2012, 01, 01, 01, 01, 01));
+    taskInfo.setStatus(TaskStatus.PENDING);
+    Member member = new Member();
+    member.setID(1001);
+    member.setName("testuser1");
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.memberServiceMock.addMember(member);
+    NodeMock taskNode = new NodeMock(3000, "TaskName", "Task");
+    taskNode.setStartPointId(2000);
+    taskNode.setPath("TaskName");
+    for (int i = 1; i <= 3; i++) {
+      NodeMock testNode = new NodeMock(4000 + i, "Document " + i);
+      testNode.setStartPointId(2000);
+      testNode.setPath("TaskName", "Document " + i);
+      soapFactory.documentManagementMock.addNode(testNode);
+    }
+    soapFactory.documentManagementMock.addNode(taskNode);
+    soapFactory.collaborationMock.addTaskInfo(taskInfo);
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doTask(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/TaskName:3000")),
+        taskNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
+    String expected = "<!DOCTYPE html>\n"
+        + "<html><head><title>TaskName</title></head>"
+        + "<body><h1>TaskName</h1>"
+        + "<p>These are the comments.</p>"
+        + "<p>These are the instructions.</p>"
+        + "</body></html>";
+    assertEquals(expected,
+        responseMock.outputStream.toString("UTF-8"));
+    Map<String, List<String>> responseMetadata = responseMock.getMetadata();
+    assertEquals("testuser1", responseMetadata.get("AssignedTo").get(0));
+    assertEquals("2013-02-01", responseMetadata.get("CompletionDate").get(0));
+    assertEquals("2012-02-01", responseMetadata.get("DateAssigned").get(0));
+    assertEquals("2014-02-01", responseMetadata.get("DueDate").get(0));
+    assertEquals("2012-02-01", responseMetadata.get("StartDate").get(0));
+    assertEquals("LOW", responseMetadata.get("Priority").get(0));
+    assertEquals("PENDING", responseMetadata.get("Status").get(0));
+    List<String> anchors = responseMock.getAnchors();
+    assertEquals(3, anchors.size());
+    assertEquals(
+        Lists.newArrayList("Document 1", "Document 2", "Document 3"),
+        anchors);
+  }
+
+  @Test
+  public void testDoTaskErrorGettingContents() throws IOException {
+    class CollaborationMockError extends CollaborationMock {
+      public TaskInfo getTask(long id) {
+        throw getSoapFaultException("error retrieving task info",
+            "uri", "local", "prefix");
+      }
+    };
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.collaborationMock = new CollaborationMockError();
+    NodeMock taskNode = new NodeMock(3000, "TaskName", "Task");
+    taskNode.setStartPointId(2000);
+    taskNode.setPath("TaskName");
+    for (int i = 1; i <= 3; i++) {
+      NodeMock testNode = new NodeMock(4000 + i, "Document " + i);
+      testNode.setStartPointId(2000);
+      testNode.setPath("TaskName", "Document " + i);
+      soapFactory.documentManagementMock.addNode(testNode);
+    }
+    soapFactory.documentManagementMock.addNode(taskNode);
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doTask(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/TaskName:3000")),
+        taskNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
+    String expected = "<!DOCTYPE html>\n"
+        + "<html><head><title>Folder 2000/TaskName:3000</title>"
+        + "</head><body><h1>Folder 2000/TaskName:3000</h1>"
+        + "<li><a href=\"2000/TaskName/Document+1:4001\">Document 1</a></li>"
+        + "<li><a href=\"2000/TaskName/Document+2:4002\">Document 2</a></li>"
+        + "<li><a href=\"2000/TaskName/Document+3:4003\">Document 3</a></li>"
+        + "</body></html>";
+    assertEquals(expected,
+        responseMock.outputStream.toString("UTF-8"));
+  }
+
   private class SoapFactoryMock implements SoapFactory {
     private AuthenticationMock authenticationMock;
     private DocumentManagementMock documentManagementMock;
     private ContentServiceMock contentServiceMock;
     private MemberServiceMock memberServiceMock;
+    private CollaborationMock collaborationMock;
 
     private SoapFactoryMock() {
       this.authenticationMock = new AuthenticationMock();
       this.documentManagementMock = new DocumentManagementMock();
       this.contentServiceMock = new ContentServiceMock();
       this.memberServiceMock = new MemberServiceMock();
+      this.collaborationMock = new CollaborationMock();
     }
 
     @Override
@@ -1200,6 +1824,12 @@ public class OpentextAdaptorTest {
           this.documentManagementMock);
     }
 
+    private DocumentManagement newDocumentManagement(
+        DocumentManagementMock documentManagementMock) {
+      return Proxies.newProxyInstance(DocumentManagement.class,
+          documentManagementMock);
+    }
+
     @Override
     public ContentService newContentService(
         DocumentManagement documentManagement) {
@@ -1212,6 +1842,13 @@ public class OpentextAdaptorTest {
         DocumentManagement documentManagement) {
       return Proxies.newProxyInstance(MemberService.class,
           this.memberServiceMock);
+    }
+
+    @Override
+    public Collaboration newCollaboration(
+        DocumentManagement documentManagement) {
+      return Proxies.newProxyInstance(Collaboration.class,
+          this.collaborationMock);
     }
 
     @Override
@@ -1248,18 +1885,18 @@ public class OpentextAdaptorTest {
       throw new AssertionError(
           "Unexpected test config: " + username + "/" + password);
     }
+  }
 
-    private SOAPFaultException getSoapFaultException(String message,
-        String uri, String localPart, String prefix) {
-      try {
-        SOAPFactory soapFactory = SOAPFactory.newInstance();
-        SOAPFault soapFault = soapFactory.createFault(
-            message, new QName(uri, localPart, prefix));
-        return new SOAPFaultException(soapFault);
-      } catch (SOAPException soapException) {
-        throw new RuntimeException("Failed to create SOAPFaultException",
-            soapException);
-      }
+  private SOAPFaultException getSoapFaultException(String message,
+      String uri, String localPart, String prefix) {
+    try {
+      SOAPFactory soapFactory = SOAPFactory.newInstance();
+      SOAPFault soapFault = soapFactory.createFault(
+          message, new QName(uri, localPart, prefix));
+      return new SOAPFaultException(soapFault);
+    } catch (SOAPException soapException) {
+      throw new RuntimeException("Failed to create SOAPFaultException",
+          soapException);
     }
   }
 
@@ -1327,6 +1964,7 @@ public class OpentextAdaptorTest {
       return null;
     }
 
+    // TODO: use parent id instead.
     public List<Node> listNodes(long containerNodeId, boolean partialData) {
       List<Node> results = new ArrayList<Node>();
       NodeMock containerNode = findNode(containerNodeId);
@@ -1417,6 +2055,89 @@ public class OpentextAdaptorTest {
         }
       }
       return memberList;
+    }
+  }
+
+  private class CollaborationMock {
+    private List<MilestoneInfo> milestoneInfo =
+        new ArrayList<MilestoneInfo>();
+    private List<NewsInfo> newsInfo =
+        new ArrayList<NewsInfo>();
+    private List<ProjectInfo> projectInfo =
+        new ArrayList<ProjectInfo>();
+    private List<DiscussionItem> discussionItems =
+        new ArrayList<DiscussionItem>();
+    private List<TaskInfo> taskInfo =
+        new ArrayList<TaskInfo>();
+
+    public MilestoneInfo getMilestone(long id) {
+      for (MilestoneInfo info : this.milestoneInfo) {
+        if (info.getID() == id) {
+          return info;
+        }
+      }
+      throw getSoapFaultException("Collaboration.ObjectIDInvalid", "uri",
+          "Collaboration.ObjectIDInvalid", "prefix");
+    }
+
+    public NewsInfo getNews(long id) {
+      for (NewsInfo info : this.newsInfo) {
+        if (info.getID() == id) {
+          return info;
+        }
+      }
+      throw getSoapFaultException("Collaboration.ObjectIDInvalid", "uri",
+          "Collaboration.ObjectIDInvalid", "prefix");
+    }
+
+    public ProjectInfo getProject(long id) {
+      for (ProjectInfo info : this.projectInfo) {
+        if (info.getID() == id) {
+          return info;
+        }
+      }
+      throw getSoapFaultException("Collaboration.ObjectIDInvalid", "uri",
+          "Collaboration.ObjectIDInvalid", "prefix");
+    }
+
+    public DiscussionItem getTopicReply(long id) {
+      for (DiscussionItem item : this.discussionItems) {
+        if (item.getID() == id) {
+          return item;
+        }
+      }
+      throw getSoapFaultException("Collaboration.ObjectIDInvalid", "uri",
+          "Collaboration.ObjectIDInvalid", "prefix");
+    }
+
+    public TaskInfo getTask(long id) {
+      for (TaskInfo info : this.taskInfo) {
+        if (info.getID() == id) {
+          return info;
+        }
+      }
+      throw getSoapFaultException("Collaboration.ObjectIDInvalid", "uri",
+          "Collaboration.ObjectIDInvalid", "prefix");
+    }
+
+    private void addMilestoneInfo(MilestoneInfo milestoneInfo) {
+      this.milestoneInfo.add(milestoneInfo);
+    }
+
+    private void addNewsInfo(NewsInfo newsInfo) {
+      this.newsInfo.add(newsInfo);
+    }
+
+    private void addProjectInfo(ProjectInfo projectInfo) {
+      this.projectInfo.add(projectInfo);
+    }
+
+    private void addDiscussionItem(DiscussionItem discussionItem) {
+      this.discussionItems.add(discussionItem);
+    }
+
+    private void addTaskInfo(TaskInfo taskInfo) {
+      this.taskInfo.add(taskInfo);
     }
   }
 
@@ -1620,6 +2341,7 @@ public class OpentextAdaptorTest {
     private boolean notFound = false;
     private Map<String, List<String>> metadata =
         new HashMap<String, List<String>>();
+    private List<String> anchors = new ArrayList<String>();
 
     ResponseMock() {
       this.outputStream = new ByteArrayOutputStream();
@@ -1654,12 +2376,20 @@ public class OpentextAdaptorTest {
       values.add(value);
     }
 
+    public void addAnchor(URI uri, String text) {
+      this.anchors.add(text);
+    }
+
     private boolean notFound() {
       return this.notFound;
     }
 
     private Map<String, List<String>> getMetadata() {
       return this.metadata;
+    }
+
+    private List<String> getAnchors() {
+      return this.anchors;
     }
   }
 
