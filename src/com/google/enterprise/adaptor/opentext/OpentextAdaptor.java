@@ -19,14 +19,18 @@ import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.enterprise.adaptor.AbstractAdaptor;
+import com.google.enterprise.adaptor.Acl;
+import com.google.enterprise.adaptor.Acl.Builder;
 import com.google.enterprise.adaptor.AdaptorContext;
 import com.google.enterprise.adaptor.Config;
 import com.google.enterprise.adaptor.DocId;
 import com.google.enterprise.adaptor.DocIdPusher;
+import com.google.enterprise.adaptor.GroupPrincipal;
 import com.google.enterprise.adaptor.IOHelper;
 import com.google.enterprise.adaptor.InvalidConfigurationException;
 import com.google.enterprise.adaptor.Request;
 import com.google.enterprise.adaptor.Response;
+import com.google.enterprise.adaptor.UserPrincipal;
 
 import com.opentext.livelink.service.collaboration.Collaboration;
 import com.opentext.livelink.service.collaboration.Collaboration_Service;
@@ -57,6 +61,9 @@ import com.opentext.livelink.service.docman.GetNodesInContainerOptions;
 import com.opentext.livelink.service.docman.Metadata;
 import com.opentext.livelink.service.docman.Node;
 import com.opentext.livelink.service.docman.NodeFeature;
+import com.opentext.livelink.service.docman.NodePermissions;
+import com.opentext.livelink.service.docman.NodeRight;
+import com.opentext.livelink.service.docman.NodeRights;
 import com.opentext.livelink.service.docman.NodeVersionInfo;
 import com.opentext.livelink.service.docman.PrimitiveAttribute;
 import com.opentext.livelink.service.docman.SetAttribute;
@@ -82,9 +89,11 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.SortedSet;
 import java.util.TreeMap;
@@ -116,6 +125,8 @@ public class OpentextAdaptor extends AbstractAdaptor {
   private final SoapFactory soapFactory;
   private String username;
   private String password;
+  private String adminUsername;
+  private String adminPassword;
   /** Configured start points, with unknown values removed. */
   private List<StartPoint> startPoints;
   private String contentServerUrl;
@@ -155,6 +166,8 @@ public class OpentextAdaptor extends AbstractAdaptor {
     config.addKey("opentext.webServicesUrl", null);
     config.addKey("opentext.username", null);
     config.addKey("opentext.password", null);
+    config.addKey("opentext.adminUsername", "");
+    config.addKey("opentext.adminPassword", "");
     config.addKey("opentext.src", "EnterpriseWS");
     config.addKey("opentext.src.separator", ",");
     config.addKey("opentext.displayUrl.contentServerUrl", null);
@@ -197,8 +210,36 @@ public class OpentextAdaptor extends AbstractAdaptor {
     log.log(Level.CONFIG, "opentext.username: {0}", username);
     this.username = username;
     this.password = password;
-
-
+    String adminUsername = config.getValue("opentext.adminUsername");
+    if (Strings.isNullOrEmpty(adminUsername)) {
+      log.log(Level.CONFIG, "No user with administration rights configured."
+          + " User " + this.username
+          + " will be used to read item permissions.");
+      this.adminUsername = null;
+      this.adminPassword = null;
+    } else {
+      String adminPassword = context.getSensitiveValueDecoder().decodeValue(
+          config.getValue("opentext.adminPassword"));
+      log.log(Level.CONFIG, "opentext.adminUsername: {0}", adminUsername);
+      this.adminUsername = adminUsername;
+      this.adminPassword = adminPassword;
+      Authentication authentication = soapFactory.newAuthentication();
+      try {
+        authentication.authenticateUser(
+            this.adminUsername, this.adminPassword);
+      } catch (SOAPFaultException soapFaultException) {
+        SOAPFault fault = soapFaultException.getFault();
+        String localPart = fault.getFaultCodeAsQName().getLocalPart();
+        if ("Core.LoginFailed".equals(localPart)) {
+          throw new InvalidConfigurationException(
+              localPart
+              + " (opentext.adminUsername: " + this.adminUsername + "): "
+              + fault.getFaultString(),
+              soapFaultException);
+        }
+        throw soapFaultException;
+      }
+    }
     Authentication authentication = soapFactory.newAuthentication();
     String authenticationToken;
     try {
@@ -208,7 +249,9 @@ public class OpentextAdaptor extends AbstractAdaptor {
       SOAPFault fault = soapFaultException.getFault();
       String localPart = fault.getFaultCodeAsQName().getLocalPart();
       if ("Core.LoginFailed".equals(localPart)) {
-        throw new InvalidConfigurationException(fault.getFaultString(),
+        throw new InvalidConfigurationException(
+            localPart + " (opentext.username: " + username + "): "
+            + fault.getFaultString(),
             soapFaultException);
       }
       // The only other currently known exception code here is
@@ -380,6 +423,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
 
     log.log(Level.FINER, "getDocContent for {0} with type {1}",
         new String[] { opentextDocId.toString(), node.getType() });
+    doAcl(documentManagement, opentextDocId, node, resp);
     doCategories(documentManagement, node, resp);
     doNodeFeatures(node, resp);
     doNodeProperties(documentManagement, node, resp);
@@ -417,6 +461,140 @@ public class OpentextAdaptor extends AbstractAdaptor {
         } else {
           doNode(documentManagement, opentextDocId, node, resp);
         }
+    }
+  }
+
+  @VisibleForTesting
+  void doAcl(DocumentManagement documentManagement,
+      OpentextDocId opentextDocId, Node node, Response response) {
+    if (this.adminUsername != null) {
+      Authentication authentication = this.soapFactory.newAuthentication();
+      String authenticationToken;
+      try {
+        authenticationToken = authentication.authenticateUser(
+            this.adminUsername, this.adminPassword);
+        documentManagement =
+            this.soapFactory.newDocumentManagement(authenticationToken);
+      } catch (SOAPFaultException soapFaultException) {
+        log.log(Level.WARNING,
+            "Failed to authenticate as " + this.adminUsername,
+            soapFaultException);
+        throw soapFaultException;
+      }
+    }
+    NodeRights nodeRights;
+    try {
+      nodeRights = documentManagement.getNodeRights(node.getID());
+    } catch (SOAPFaultException soapFaultException) {
+      log.log(Level.WARNING,
+          "Failed to get node rights for " + opentextDocId,
+          soapFaultException);
+      throw soapFaultException;
+    }
+    Set<UserPrincipal> permitUsers = new HashSet<UserPrincipal>();
+    Set<GroupPrincipal> permitGroups = new HashSet<GroupPrincipal>();
+    NodeRight publicRight = nodeRights.getPublicRight();
+    if (publicRight != null) {
+      NodePermissions publicPermissions = publicRight.getPermissions();
+      if (publicPermissions.isSeeContentsPermission()) {
+        permitGroups.add(new GroupPrincipal("Public Access"));
+      }
+    }
+    // Rights can be removed and can then be null in the API.
+    List<NodeRight> nodeRightList = new ArrayList<NodeRight>();
+    if (nodeRights.getOwnerRight() != null) {
+      nodeRightList.add(nodeRights.getOwnerRight());
+    }
+    if (nodeRights.getOwnerGroupRight() != null) {
+      nodeRightList.add(nodeRights.getOwnerGroupRight());
+    }
+    if (nodeRights.getACLRights() != null) {
+      nodeRightList.addAll(nodeRights.getACLRights());
+    }
+    MemberService memberService =
+        this.soapFactory.newMemberService(documentManagement);
+    for (NodeRight nodeRight : nodeRightList) {
+      NodePermissions permissions = nodeRight.getPermissions();
+      if (!permissions.isSeeContentsPermission()) {
+        continue;
+      }
+      try {
+        Member member =
+            memberService.getMemberById(nodeRight.getRightID());
+        if (member == null) {
+          log.log(Level.FINER, "Member not found: " + nodeRight.getRightID());
+          continue;
+        }
+        if ("User".equals(member.getType())) {
+          permitUsers.add(new UserPrincipal(member.getName()));
+        } else if ("Group".equals(member.getType())) {
+          permitGroups.add(new GroupPrincipal(member.getName()));
+        }
+      } catch (SOAPFaultException soapFaultException) {
+        SOAPFault fault = soapFaultException.getFault();
+        String localPart = fault.getFaultCodeAsQName().getLocalPart();
+        if ("MemberService.MemberTypeNotValid".equals(localPart)) {
+          // There are groups that are specific to projects
+          // (Guests, Members, Coordinators). These have ids that
+          // show up in NodeRight.getRightID, but you can't
+          // retrieve information about them using
+          // MemberService.getMemberById. You can list their
+          // members using MemberService.listMembers.
+          try {
+            Set<UserPrincipal> users = new HashSet<UserPrincipal>();
+            Set<GroupPrincipal> groups = new HashSet<GroupPrincipal>();
+            listMembers(
+                memberService, nodeRight.getRightID(), users, groups);
+            permitUsers.addAll(users);
+            permitGroups.addAll(groups);
+          } catch (SOAPFaultException listMembersException) {
+            log.log(Level.WARNING,
+                "Failed to get member information for " + opentextDocId
+                + " using rightId " + nodeRight.getRightID(),
+                listMembersException);
+            throw listMembersException;
+          }
+        } else {
+          log.log(Level.WARNING,
+              "Failed to get member information for " + opentextDocId
+              + " using rightId " + nodeRight.getRightID(),
+              soapFaultException);
+          throw soapFaultException;
+        }
+      }
+    }
+    if (permitUsers.size() == 0 && permitGroups.size() == 0) {
+      log.log(Level.FINE,
+          "No users or groups with SeeContents permission for "
+          + opentextDocId);
+      throw new RuntimeException(
+          "No ACL information for " + opentextDocId);
+    }
+
+    // Even when permissions are inherited, Content Server keeps
+    // a copy of all the permissions on each node, so each ACL
+    // that we construct here should be complete for the node.
+    Acl acl = new Acl.Builder().setEverythingCaseSensitive()
+        .setInheritanceType(Acl.InheritanceType.LEAF_NODE)
+        .setPermitUsers(permitUsers).setPermitGroups(permitGroups).build();
+    response.setAcl(acl);
+  }
+
+  private void listMembers(MemberService memberService, long id,
+      Set<UserPrincipal> users, Set<GroupPrincipal> groups)
+      throws SOAPFaultException {
+    List<Member> members = memberService.listMembers(id);
+    for (Member member : members) {
+      if ("User".equals(member.getType())) {
+        users.add(new UserPrincipal(member.getName()));
+      } else if ("Group".equals(member.getType())) {
+        groups.add(new GroupPrincipal(member.getName()));
+      } else if ("ProjectGroup".equals(member.getType())) {
+        // ProjectGroups can be references to parent
+        // ProjectGroups when, for example, a Project is nested
+        // within another Project.
+        listMembers(memberService, member.getID(), users, groups);
+      }
     }
   }
 

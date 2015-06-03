@@ -22,13 +22,18 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+import com.google.enterprise.adaptor.Acl;
 import com.google.enterprise.adaptor.AdaptorContext;
 import com.google.enterprise.adaptor.Config;
 import com.google.enterprise.adaptor.DocId;
 import com.google.enterprise.adaptor.DocIdPusher;
+import com.google.enterprise.adaptor.GroupPrincipal;
 import com.google.enterprise.adaptor.InvalidConfigurationException;
+import com.google.enterprise.adaptor.Principal;
 import com.google.enterprise.adaptor.Request;
 import com.google.enterprise.adaptor.Response;
+import com.google.enterprise.adaptor.UserPrincipal;
 
 import com.opentext.livelink.service.collaboration.Collaboration;
 import com.opentext.livelink.service.collaboration.DiscussionItem;
@@ -55,6 +60,9 @@ import com.opentext.livelink.service.docman.DocumentManagement;
 import com.opentext.livelink.service.docman.Metadata;
 import com.opentext.livelink.service.docman.Node;
 import com.opentext.livelink.service.docman.NodeFeature;
+import com.opentext.livelink.service.docman.NodePermissions;
+import com.opentext.livelink.service.docman.NodeRight;
+import com.opentext.livelink.service.docman.NodeRights;
 import com.opentext.livelink.service.docman.NodeVersionInfo;
 import com.opentext.livelink.service.docman.PrimitiveAttribute;
 import com.opentext.livelink.service.docman.SetAttribute;
@@ -81,6 +89,7 @@ import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import javax.activation.DataHandler;
 import javax.activation.DataSource;
@@ -160,6 +169,8 @@ public class OpentextAdaptorTest {
     Config config = context.getConfig();
     config.addKey("opentext.username", "invaliduser");
     config.addKey("opentext.password", "validpassword");
+    config.addKey("opentext.adminUsername", "");
+    config.addKey("opentext.adminPassword", "");
     config.addKey("opentext.webServicesUrl",
         "http://example.com/les-services/services");
     adaptor.init(context);
@@ -178,6 +189,8 @@ public class OpentextAdaptorTest {
     Config config = context.getConfig();
     config.addKey("opentext.username", "validuser");
     config.addKey("opentext.password", "invalidpassword");
+    config.addKey("opentext.adminUsername", "");
+    config.addKey("opentext.adminPassword", "");
     config.addKey("opentext.webServicesUrl",
         "http://example.com/les-services/services");
     adaptor.init(context);
@@ -196,6 +209,28 @@ public class OpentextAdaptorTest {
     Config config = context.getConfig();
     config.addKey("opentext.username", "validuser");
     config.addKey("opentext.password", "other");
+    config.addKey("opentext.adminUsername", "");
+    config.addKey("opentext.adminPassword", "");
+    config.addKey("opentext.webServicesUrl",
+        "http://example.com/les-services/services");
+    adaptor.init(context);
+  }
+
+  @Test
+  public void testAuthenticateAdminUserInvalidUser() {
+    thrown.expect(InvalidConfigurationException.class);
+    thrown.expectMessage("javax.xml.ws.soap.SOAPFaultException");
+
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    assertFalse("authUser called before init",
+        soapFactory.authenticationMock.authenticateUserCalled);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = context.getConfig();
+    config.addKey("opentext.username", "validuser");
+    config.addKey("opentext.password", "validpassword");
+    config.addKey("opentext.adminUsername", "invaliduser");
+    config.addKey("opentext.adminPassword", "validpassword");
     config.addKey("opentext.webServicesUrl",
         "http://example.com/les-services/services");
     adaptor.init(context);
@@ -754,9 +789,7 @@ public class OpentextAdaptorTest {
     integerValue.getValues().add(new Long(14986));
 
     // Create the corresponding member.
-    Member member = new Member();
-    member.setID(14985);
-    member.setName("testuser1");
+    Member member = getMember(14985, "testuser1", "User");
 
     SoapFactoryMock soapFactory = new SoapFactoryMock();
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
@@ -1168,9 +1201,7 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
-    Member member = new Member();
-    member.setID(14985);
-    member.setName("testuser1");
+    Member member = getMember(14985, "testuser1", "User");
     soapFactory.memberServiceMock.addMember(member);
 
     NodeMock node = new NodeMock(54678, "Node Name");
@@ -1613,9 +1644,7 @@ public class OpentextAdaptorTest {
       soapFactory.documentManagementMock.addNode(testNode);
     }
     // Create the corresponding member.
-    Member member = new Member();
-    member.setID(1001);
-    member.setName("testuser1");
+    Member member = getMember(1001, "testuser1", "User");
     soapFactory.memberServiceMock.addMember(member);
     soapFactory.documentManagementMock.addNode(discussionNode);
     soapFactory.collaborationMock.addDiscussionItem(discussionItem);
@@ -1708,9 +1737,7 @@ public class OpentextAdaptorTest {
     taskInfo.setStartDate(
         getXmlGregorianCalendar(2012, 01, 01, 01, 01, 01));
     taskInfo.setStatus(TaskStatus.PENDING);
-    Member member = new Member();
-    member.setID(1001);
-    member.setName("testuser1");
+    Member member = getMember(1001, "testuser1", "User");
     SoapFactoryMock soapFactory = new SoapFactoryMock();
     soapFactory.memberServiceMock.addMember(member);
     NodeMock taskNode = new NodeMock(3000, "TaskName", "Task");
@@ -1794,6 +1821,286 @@ public class OpentextAdaptorTest {
         + "</body></html>";
     assertEquals(expected,
         responseMock.outputStream.toString("UTF-8"));
+  }
+
+  @Test
+  public void testAclOwnerRight() throws IOException {
+    Member owner = getMember(1001, "testuser1", "User");
+    NodeRights nodeRights = new NodeRights();
+    nodeRights.setOwnerRight(getNodeRight(owner.getID(), "Owner"));
+    NodeMock documentNode = new NodeMock(3000, "DocumentName", "Document");
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.documentManagementMock
+        .setNodeRights(documentNode.getID(), nodeRights);
+    soapFactory.memberServiceMock.addMember(owner);
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doAcl(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/DocumentName:3000")),
+        documentNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
+    assertEquals(
+        Sets.newHashSet(new UserPrincipal(owner.getName())),
+        responseMock.getAcl().getPermits());
+  }
+
+  @Test
+  public void testAclOwnerGroupRight() throws IOException {
+    Member ownerGroup = getMember(1002, "DefaultGroup", "Group");
+    NodeRights nodeRights = new NodeRights();
+    nodeRights.setOwnerGroupRight(
+        getNodeRight(ownerGroup.getID(), "OwnerGroup"));
+    NodeMock documentNode = new NodeMock(3000, "DocumentName", "Document");
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.documentManagementMock
+        .setNodeRights(documentNode.getID(), nodeRights);
+    soapFactory.memberServiceMock.addMember(ownerGroup);
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doAcl(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/DocumentName:3000")),
+        documentNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
+    assertEquals(
+        Sets.newHashSet(new GroupPrincipal(ownerGroup.getName())),
+        responseMock.getAcl().getPermits());
+  }
+
+  @Test
+  public void testAclPublicRight() throws IOException {
+    NodeRights nodeRights = new NodeRights();
+    nodeRights.setPublicRight(getNodeRight(-1, "Public"));
+    NodeMock documentNode = new NodeMock(3000, "DocumentName", "Document");
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.documentManagementMock
+        .setNodeRights(documentNode.getID(), nodeRights);
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doAcl(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/DocumentName:3000")),
+        documentNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
+    assertEquals(
+        Sets.newHashSet(new GroupPrincipal("Public Access")),
+        responseMock.getAcl().getPermits());
+  }
+
+  @Test
+  public void testAclAclRights() throws IOException {
+    Member aclUser = getMember(1001, "testuser1", "User");
+    NodeRights nodeRights = new NodeRights();
+    nodeRights.getACLRights().add(getNodeRight(aclUser.getID(), "ACL"));
+    NodeMock documentNode = new NodeMock(3000, "DocumentName", "Document");
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.documentManagementMock
+        .setNodeRights(documentNode.getID(), nodeRights);
+    soapFactory.memberServiceMock.addMember(aclUser);
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doAcl(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/DocumentName:3000")),
+        documentNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
+    assertEquals(
+        Sets.newHashSet(new UserPrincipal(aclUser.getName())),
+        responseMock.getAcl().getPermits());
+  }
+
+  /**
+   * This test emulates an item within a project whose ACLs
+   * reference the parent project's Members/Guests/Coordinators
+   * groups.
+   */
+  @Test
+  public void testAclProjectMember() throws IOException {
+    Member owner = getMember(1001, "testuser1", "User");
+    Member ownerGroup = getMember(1002, "DefaultGroup", "Group");
+    Member guestUser = getMember(1003, "GuestUser", "User");
+    Member projectCoordinators =
+        getMember(54321, "Coordinators", "ProjectGroup");
+    Member projectMembers = getMember(54322, "Members", "ProjectGroup");
+    Member projectGuests = getMember(54323, "Guests", "ProjectGroup");
+    Member projectGroup1 = getMember(98765, "Group1", "ProjectGroup");
+    Member projectGroup2 = getMember(98767, "Group2", "ProjectGroup");
+    NodeRights nodeRights = new NodeRights();
+    nodeRights.setOwnerRight(getNodeRight(owner.getID(), "Owner"));
+    nodeRights.setOwnerGroupRight(
+        getNodeRight(ownerGroup.getID(), "OwnerGroup"));
+    nodeRights.getACLRights().add(
+        getNodeRight(projectGroup1.getID(), "ACL"));
+    nodeRights.getACLRights().add(
+        getNodeRight(projectGroup2.getID(), "ACL"));
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.memberServiceMock.addMember(owner);
+    soapFactory.memberServiceMock.addMember(ownerGroup);
+    soapFactory.memberServiceMock.addMember(guestUser);
+    soapFactory.memberServiceMock.addMember(projectCoordinators);
+    soapFactory.memberServiceMock.addMember(projectMembers);
+    soapFactory.memberServiceMock.addMember(projectGuests);
+    soapFactory.memberServiceMock.addMember(projectGroup1);
+    soapFactory.memberServiceMock.addMember(projectGroup2);
+    soapFactory.memberServiceMock.addMemberToGroup(
+        projectCoordinators.getID(), owner);
+    soapFactory.memberServiceMock.addMemberToGroup(
+        projectMembers.getID(), ownerGroup);
+    soapFactory.memberServiceMock.addMemberToGroup(
+        projectGuests.getID(), guestUser);
+    soapFactory.memberServiceMock.addMemberToGroup(
+        projectGroup1.getID(), projectCoordinators);
+    soapFactory.memberServiceMock.addMemberToGroup(
+        projectGroup1.getID(), projectMembers);
+    soapFactory.memberServiceMock.addMemberToGroup(
+        projectGroup2.getID(), projectGuests);
+    NodeMock documentNode = new NodeMock(3000, "DocumentName", "Document");
+    soapFactory.documentManagementMock
+        .setNodeRights(documentNode.getID(), nodeRights);
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doAcl(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/DocumentName:3000")),
+        documentNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
+    assertEquals(
+        Sets.newHashSet(new UserPrincipal(owner.getName()),
+            new UserPrincipal(guestUser.getName()),
+            new GroupPrincipal(ownerGroup.getName())),
+        responseMock.getAcl().getPermits());;
+  }
+
+  @Test
+  public void testAclNoPermissions() throws IOException {
+    thrown.expect(RuntimeException.class);
+    thrown.expectMessage(
+        "No ACL information for DocId(2000/DocumentName:3000)");
+
+    NodeRight nodeRight = getNodeRight(-1, "Public");
+    nodeRight.getPermissions().setSeeContentsPermission(false);
+    NodeRights nodeRights = new NodeRights();
+    nodeRights.setPublicRight(nodeRight);
+    NodeMock documentNode = new NodeMock(3000, "DocumentName", "Document");
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.documentManagementMock
+        .setNodeRights(documentNode.getID(), nodeRights);
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doAcl(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/DocumentName:3000")),
+        documentNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
+  }
+
+  @Test
+  public void testAclInvalidAdminUser() throws IOException {
+    thrown.expect(SOAPFaultException.class);
+    thrown.expectMessage("Failed to authenticate as admin");
+
+    class AuthenticationMockError extends AuthenticationMock {
+      public String authenticateUser(String username, String password) {
+        throw getSoapFaultException("Failed to authenticate as admin",
+            "urn:Core.service.livelink.opentext.com",
+            "Core.LoginFailed", "ns0");
+      }
+    };
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    NodeMock documentNode = new NodeMock(3000, "DocumentName", "Document");
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.adminUsername", "validuser");
+    config.overrideKey("opentext.adminPassword", "validpassword");
+    adaptor.init(context);
+    // Replace authenticationMock after calling init so we don't
+    // just get the error there; we want to trigger it in doAcl
+    // to verify that the exception's rethrown.
+    soapFactory.authenticationMock = new AuthenticationMockError();
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doAcl(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/DocumentName:3000")),
+        documentNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
+  }
+
+  @Test
+  public void testAclGetNodeRightsError() throws IOException {
+    thrown.expect(SOAPFaultException.class);
+    thrown.expectMessage("Failed to get node rights");
+
+    class DocumentManagementMockError extends DocumentManagementMock {
+      public NodeRights getNodeRights(long id) {
+        throw getSoapFaultException("Failed to get node rights",
+            "uri", "local", "ns0");
+      }
+    };
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.documentManagementMock = new DocumentManagementMockError();
+    NodeMock documentNode = new NodeMock(3000, "DocumentName", "Document");
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doAcl(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/DocumentName:3000")),
+        documentNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
+  }
+
+  @Test
+  public void testAclGetMemberByIdError() throws IOException {
+    thrown.expect(SOAPFaultException.class);
+    thrown.expectMessage("Failed to get member by id");
+
+    class MemberServiceMockError extends MemberServiceMock {
+      public Member getMemberById(long id) {
+        throw getSoapFaultException("Failed to get member by id",
+            "uri", "local", "ns0");
+      }
+    };
+    Member member = getMember(1001, "testuser1", "User");
+    NodeRights nodeRights = new NodeRights();
+    nodeRights.setOwnerRight(getNodeRight(member.getID(), "Owner"));
+    NodeMock documentNode = new NodeMock(3000, "DocumentName", "Document");
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.documentManagementMock
+        .setNodeRights(documentNode.getID(), nodeRights);
+    soapFactory.memberServiceMock = new MemberServiceMockError();
+    soapFactory.memberServiceMock.addMember(member);
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doAcl(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/DocumentName:3000")),
+        documentNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
+  }
+
+  @Test
+  public void testAclListMembersError() throws IOException {
+    thrown.expect(SOAPFaultException.class);
+    thrown.expectMessage("Failed to list members");
+
+    class MemberServiceMockError extends MemberServiceMock {
+      public Member getMemberById(long id) {
+        throw getSoapFaultException("Failed to get member by id",
+            "uri", "MemberService.MemberTypeNotValid", "ns0");
+      }
+
+      public List<Member> listMembers(long id) {
+        throw getSoapFaultException("Failed to list members",
+            "uri", "local", "ns0");
+      }
+    };
+    Member member = getMember(1001, "testuser1", "User");
+    NodeRights nodeRights = new NodeRights();
+    nodeRights.setOwnerRight(getNodeRight(member.getID(), "Owner"));
+    NodeMock documentNode = new NodeMock(3000, "DocumentName", "Document");
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.documentManagementMock
+        .setNodeRights(documentNode.getID(), nodeRights);
+    soapFactory.memberServiceMock = new MemberServiceMockError();
+    soapFactory.memberServiceMock.addMember(member);
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doAcl(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/DocumentName:3000")),
+        documentNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
   }
 
   private class SoapFactoryMock implements SoapFactory {
@@ -1912,6 +2219,7 @@ public class OpentextAdaptorTest {
   private class DocumentManagementMock {
     List<NodeMock> nodes = new ArrayList<NodeMock>();
     List<AttributeGroupDefinition> categoryDefinitions;
+    Map<Long, NodeRights> nodeRights = new HashMap<Long, NodeRights>();
 
     DocumentManagementMock() {
       this.nodes.add(new NodeMock(2000, "Enterprise Workspace"));
@@ -1939,6 +2247,10 @@ public class OpentextAdaptorTest {
             new ArrayList<AttributeGroupDefinition>();
       }
       this.categoryDefinitions.add(categoryDefinition);
+    }
+
+    private void setNodeRights(long id, NodeRights nodeRights) {
+      this.nodeRights.put(id, nodeRights);
     }
 
     public Node getNode(long nodeId) {
@@ -2000,6 +2312,14 @@ public class OpentextAdaptorTest {
       }
       return null;
     }
+
+    public NodeRights getNodeRights(long id) {
+      NodeRights nodeRights = this.nodeRights.get(id);
+      if (nodeRights != null) {
+        return nodeRights;
+      }
+      throw getSoapFaultException("no node rights", "uri", "local", "prefix");
+    }
   }
 
   private class ContentServiceMock {
@@ -2029,14 +2349,34 @@ public class OpentextAdaptorTest {
 
   private class MemberServiceMock {
     private List<Member> members = new ArrayList<Member>();
+    private Map<Long, List<Member>> groupMembers =
+        new HashMap<Long, List<Member>>();
 
     private void addMember(Member member) {
       this.members.add(member);
     }
 
+    private void addMemberToGroup(long group, Member member) {
+      List<Member> members = this.groupMembers.get(group);
+      if (members == null) {
+        members = new ArrayList<Member>();
+      }
+      members.add(member);
+      this.groupMembers.put(group, members);
+    }
+
     public Member getMemberById(long id) {
       for (Member member : this.members) {
         if (member.getID() == id) {
+          if (!("User".equals(member.getType())
+                  || "Group".equals(member.getType()))) {
+            // This method is documented to throw this exception
+            // if the returned member type is not a group or a
+            // user.
+            throw getSoapFaultException(
+                "MemberService.MemberTypeNotValid", "uri",
+                "MemberService.MemberTypeNotValid", "prefix");
+          }
           return member;
         }
       }
@@ -2055,6 +2395,14 @@ public class OpentextAdaptorTest {
         }
       }
       return memberList;
+    }
+
+    public List<Member> listMembers(long id) {
+      List<Member> members = this.groupMembers.get(id);
+      if (members == null) {
+        members = new ArrayList<Member>();
+      }
+      return members;
     }
   }
 
@@ -2342,6 +2690,7 @@ public class OpentextAdaptorTest {
     private Map<String, List<String>> metadata =
         new HashMap<String, List<String>>();
     private List<String> anchors = new ArrayList<String>();
+    private Acl acl;
 
     ResponseMock() {
       this.outputStream = new ByteArrayOutputStream();
@@ -2380,6 +2729,10 @@ public class OpentextAdaptorTest {
       this.anchors.add(text);
     }
 
+    public void setAcl(Acl acl) {
+      this.acl = acl;
+    }
+
     private boolean notFound() {
       return this.notFound;
     }
@@ -2390,6 +2743,10 @@ public class OpentextAdaptorTest {
 
     private List<String> getAnchors() {
       return this.anchors;
+    }
+
+    private Acl getAcl() {
+      return this.acl;
     }
   }
 
@@ -2423,5 +2780,27 @@ public class OpentextAdaptorTest {
     } catch (DatatypeConfigurationException datatypeException) {
       return null;
     }
+  }
+
+  private NodeRight getNodeRight(long rightId, String type) {
+    NodePermissions nodePermissions = new NodePermissions();
+    nodePermissions.setSeeContentsPermission(true);
+    NodeRight nodeRight = new NodeRight();
+    nodeRight.setRightID(rightId);
+    nodeRight.setType(type);
+    nodeRight.setPermissions(nodePermissions);
+    return nodeRight;
+  }
+
+  /* Specifying the member type is required in order for
+   * MemberService.getMemberById to work correctly, even though
+   * in many cases we only need the name, not the type.
+   */
+  private Member getMember(long id, String name, String type) {
+    Member member = new Member();
+    member.setID(id);
+    member.setName(name);
+    member.setType(type);
+    return member;
   }
 }

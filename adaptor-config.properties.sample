@@ -7,6 +7,13 @@ opentext.webServicesUrl = <Base URL for Content Web Services>
 opentext.username = <Content Server username>
 opentext.password = <Password for Content Server user>
 
+# Content Server user with administrative privileges; used to
+# read ACL information. If the user configured in the
+# opentext.username property has administrative privileges, these
+# properties are not required.
+opentext.adminUsername = <Content Server administrative username>
+opentext.adminPassword = <Password for administrative user>
+
 # Start points may include EnterpriseWS and object ids
 opentext.src = <List of start points for document retrieval>
 opentext.src.separator = ,
