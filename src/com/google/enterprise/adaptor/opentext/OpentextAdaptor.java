@@ -28,6 +28,7 @@ import com.google.enterprise.adaptor.DocIdPusher;
 import com.google.enterprise.adaptor.GroupPrincipal;
 import com.google.enterprise.adaptor.IOHelper;
 import com.google.enterprise.adaptor.InvalidConfigurationException;
+import com.google.enterprise.adaptor.Principal;
 import com.google.enterprise.adaptor.Request;
 import com.google.enterprise.adaptor.Response;
 import com.google.enterprise.adaptor.UserPrincipal;
@@ -47,6 +48,7 @@ import com.opentext.livelink.service.core.ContentService_Service;
 import com.opentext.livelink.service.core.DataValue;
 import com.opentext.livelink.service.core.DateValue;
 import com.opentext.livelink.service.core.IntegerValue;
+import com.opentext.livelink.service.core.PageHandle;
 import com.opentext.livelink.service.core.PrimitiveValue;
 import com.opentext.livelink.service.core.RealValue;
 import com.opentext.livelink.service.core.RowValue;
@@ -70,8 +72,16 @@ import com.opentext.livelink.service.docman.SetAttribute;
 import com.opentext.livelink.service.docman.UserAttribute;
 import com.opentext.livelink.service.docman.Version;
 import com.opentext.livelink.service.memberservice.Member;
+import com.opentext.livelink.service.memberservice.MemberPrivileges;
+import com.opentext.livelink.service.memberservice.MemberSearchOptions;
+import com.opentext.livelink.service.memberservice.MemberSearchResults;
 import com.opentext.livelink.service.memberservice.MemberService;
 import com.opentext.livelink.service.memberservice.MemberService_Service;
+import com.opentext.livelink.service.memberservice.SearchColumn;
+import com.opentext.livelink.service.memberservice.SearchFilter;
+import com.opentext.livelink.service.memberservice.SearchMatching;
+import com.opentext.livelink.service.memberservice.SearchScope;
+import com.opentext.livelink.service.memberservice.User;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -127,6 +137,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
   private String password;
   private String adminUsername;
   private String adminPassword;
+  private boolean publicAccessGroupEnabled;
   /** Configured start points, with unknown values removed. */
   private List<StartPoint> startPoints;
   private String contentServerUrl;
@@ -168,6 +179,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
     config.addKey("opentext.password", null);
     config.addKey("opentext.adminUsername", "");
     config.addKey("opentext.adminPassword", "");
+    config.addKey("opentext.publicAccessGroupEnabled", "false");
     config.addKey("opentext.src", "EnterpriseWS");
     config.addKey("opentext.src.separator", ",");
     config.addKey("opentext.displayUrl.contentServerUrl", null);
@@ -260,6 +272,13 @@ public class OpentextAdaptor extends AbstractAdaptor {
       // that's the error.
       throw soapFaultException;
     }
+
+    String publicAccessGroupEnabled =
+        config.getValue("opentext.publicAccessGroupEnabled");
+    log.log(Level.CONFIG,
+        "opentext.publicAccessGroupEnabled: {0}", publicAccessGroupEnabled);
+    this.publicAccessGroupEnabled =
+        Boolean.parseBoolean(publicAccessGroupEnabled);
 
     String src = config.getValue("opentext.src");
     String separator = config.getValue("opentext.src.separator");
@@ -394,6 +413,118 @@ public class OpentextAdaptor extends AbstractAdaptor {
     }
     log.log(Level.FINER, "Sending doc ids: {0}", docIds);
     pusher.pushDocIds(docIds);
+
+    MemberService memberService =
+        this.soapFactory.newMemberService(documentManagement);
+    Map<GroupPrincipal, List<Principal>> groupDefinitions =
+        getGroups(memberService);
+    if (this.publicAccessGroupEnabled) {
+      List<Principal> publicAccessGroup = getPublicAccessGroup(memberService);
+      if (publicAccessGroup.size() > 0) {
+        groupDefinitions.put(
+            new GroupPrincipal("Public Access"), publicAccessGroup);
+      }
+    }
+    if (groupDefinitions.size() > 0) {
+      pusher.pushGroupDefinitions(groupDefinitions, true);
+    }
+  }
+
+  @VisibleForTesting
+  Map<GroupPrincipal, List<Principal>> getGroups(MemberService memberService) {
+    Map<GroupPrincipal, List<Principal>> groupDefinitions =
+        new HashMap<GroupPrincipal, List<Principal>>();
+    MemberSearchOptions options = new MemberSearchOptions();
+    options.setFilter(SearchFilter.GROUP);
+    options.setColumn(SearchColumn.NAME);
+    options.setMatching(SearchMatching.STARTSWITH);
+    options.setSearch(""); // Empty string matches everything.
+    options.setScope(SearchScope.SYSTEM);
+    options.setPageSize(50);
+    PageHandle handle = memberService.searchForMembers(options);
+    if (handle == null) {
+      log.log(Level.WARNING, "No groups found");
+      return groupDefinitions;
+    }
+    while (!handle.isFinalPage()) {
+      MemberSearchResults results = memberService.getSearchResults(handle);
+      if (results == null) {
+        log.log(Level.WARNING,
+            "getGroups: Search results from page handle were null");
+        break;
+      }
+      List<Member> groups = results.getMembers();
+      if (groups == null) {
+        log.log(Level.WARNING, "No members found in search results");
+        break;
+      }
+      log.log(Level.FINE, "Processing " + groups.size() + " groups");
+      for (Member group : groups) {
+        log.log(Level.FINER, "Processing group: " + group.getName());
+        List<Member> members = memberService.listMembers(group.getID());
+        List<Principal> memberPrincipals = new ArrayList<Principal>();
+        for (Member member : members) {
+          if ("User".equals(member.getType())) {
+            memberPrincipals.add(new UserPrincipal(member.getName()));
+          } else if ("Group".equals(member.getType())) {
+            memberPrincipals.add(new GroupPrincipal(member.getName()));
+          }
+        }
+        log.log(Level.FINER,
+            "Size of " + group.getName() + ": " + memberPrincipals.size());
+        if (memberPrincipals.size() > 0) {
+          log.log(Level.FINEST, "Adding group {0}: {1}",
+              new Object[] { group.getName(), memberPrincipals });
+          groupDefinitions.put(
+              new GroupPrincipal(group.getName()), memberPrincipals);
+        }
+      }
+      handle = results.getPageHandle();
+    }
+    return groupDefinitions;
+  }
+
+  @VisibleForTesting
+  List<Principal> getPublicAccessGroup(MemberService memberService) {
+    List<Principal> publicAccessGroup = new ArrayList<Principal>();
+    MemberSearchOptions options = new MemberSearchOptions();
+    options.setFilter(SearchFilter.USER);
+    options.setColumn(SearchColumn.NAME);
+    options.setMatching(SearchMatching.STARTSWITH);
+    options.setSearch(""); // Empty string matches everything.
+    options.setScope(SearchScope.SYSTEM);
+    options.setPageSize(50);
+    PageHandle handle = memberService.searchForMembers(options);
+    if (handle == null) {
+      log.log(Level.WARNING, "No users found");
+      return publicAccessGroup;
+    }
+    while (!handle.isFinalPage()) {
+      MemberSearchResults results = memberService.getSearchResults(handle);
+      if (results == null) {
+        log.log(Level.WARNING,
+            "getPublicAccessGroup: Search results from page handle were null");
+        break;
+      }
+      List<Member> users = results.getMembers();
+      if (users == null) {
+        log.log(Level.WARNING, "No members found in search results");
+        break;
+      }
+      for (Member user : users) {
+        if (!(user instanceof User)) { // Just check before casting.
+          continue;
+        }
+        MemberPrivileges memberPrivileges = ((User) user).getPrivileges();
+        if (memberPrivileges.isPublicAccessEnabled()) {
+          publicAccessGroup.add(new UserPrincipal(user.getName()));
+        }
+      }
+      handle = results.getPageHandle();
+    }
+    log.log(Level.FINER,
+        "Size of Public Access group: " + publicAccessGroup.size());
+    return publicAccessGroup;
   }
 
   /** Gives the bytes of a document referenced with id. */
@@ -493,11 +624,13 @@ public class OpentextAdaptor extends AbstractAdaptor {
     }
     Set<UserPrincipal> permitUsers = new HashSet<UserPrincipal>();
     Set<GroupPrincipal> permitGroups = new HashSet<GroupPrincipal>();
-    NodeRight publicRight = nodeRights.getPublicRight();
-    if (publicRight != null) {
-      NodePermissions publicPermissions = publicRight.getPermissions();
-      if (publicPermissions.isSeeContentsPermission()) {
-        permitGroups.add(new GroupPrincipal("Public Access"));
+    if (this.publicAccessGroupEnabled) {
+      NodeRight publicRight = nodeRights.getPublicRight();
+      if (publicRight != null) {
+        NodePermissions publicPermissions = publicRight.getPermissions();
+        if (publicPermissions.isSeeContentsPermission()) {
+          permitGroups.add(new GroupPrincipal("Public Access"));
+        }
       }
     }
     // Rights can be removed and can then be null in the API.

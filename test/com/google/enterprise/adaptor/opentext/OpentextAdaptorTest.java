@@ -49,6 +49,7 @@ import com.opentext.livelink.service.core.BooleanValue;
 import com.opentext.livelink.service.core.ContentService;
 import com.opentext.livelink.service.core.DateValue;
 import com.opentext.livelink.service.core.IntegerValue;
+import com.opentext.livelink.service.core.PageHandle;
 import com.opentext.livelink.service.core.PrimitiveValue;
 import com.opentext.livelink.service.core.RowValue;
 import com.opentext.livelink.service.core.StringValue;
@@ -69,8 +70,14 @@ import com.opentext.livelink.service.docman.SetAttribute;
 import com.opentext.livelink.service.docman.UserAttribute;
 import com.opentext.livelink.service.docman.Version;
 import com.opentext.livelink.service.memberservice.Member;
+import com.opentext.livelink.service.memberservice.MemberPrivileges;
+import com.opentext.livelink.service.memberservice.MemberSearchOptions;
+import com.opentext.livelink.service.memberservice.MemberSearchResults;
 import com.opentext.livelink.service.memberservice.MemberService;
+import com.opentext.livelink.service.memberservice.SearchFilter;
+import com.opentext.livelink.service.memberservice.User;
 
+import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -90,6 +97,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.activation.DataHandler;
 import javax.activation.DataSource;
@@ -104,6 +113,13 @@ import javax.xml.ws.BindingProvider;
 import javax.xml.ws.soap.SOAPFaultException;
 
 public class OpentextAdaptorTest {
+  @BeforeClass
+  public static void setUpClass() {
+    // Tests trigger warning logs in the adaptor; remove those
+    // stack traces from test output.
+    Logger.getLogger(OpentextAdaptor.class.getName()).setLevel(Level.SEVERE);
+  }
+
   @Rule
   public ExpectedException thrown = ExpectedException.none();
 
@@ -1875,6 +1891,10 @@ public class OpentextAdaptorTest {
     soapFactory.documentManagementMock
         .setNodeRights(documentNode.getID(), nodeRights);
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.publicAccessGroupEnabled", "true");
+    adaptor.init(context);
     ResponseMock responseMock = new ResponseMock();
     adaptor.doAcl(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/DocumentName:3000")),
@@ -1883,6 +1903,30 @@ public class OpentextAdaptorTest {
     assertEquals(
         Sets.newHashSet(new GroupPrincipal("Public Access")),
         responseMock.getAcl().getPermits());
+  }
+
+  @Test
+  public void testAclPublicRightNotEnabled() throws IOException {
+    thrown.expect(RuntimeException.class);
+    thrown.expectMessage(
+        "No ACL information for DocId(2000/DocumentName:3000)");
+
+    NodeRights nodeRights = new NodeRights();
+    nodeRights.setPublicRight(getNodeRight(-1, "Public"));
+    NodeMock documentNode = new NodeMock(3000, "DocumentName", "Document");
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.documentManagementMock
+        .setNodeRights(documentNode.getID(), nodeRights);
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.publicAccessGroupEnabled", "false");
+    adaptor.init(context);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doAcl(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/DocumentName:3000")),
+        documentNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
   }
 
   @Test
@@ -2103,6 +2147,106 @@ public class OpentextAdaptorTest {
         Proxies.newProxyInstance(Response.class, responseMock));
   }
 
+  @Test
+  public void testGetGroups() throws InterruptedException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    for (int i = 0; i < 20; i++) {
+      soapFactory.memberServiceMock.addMember(
+          getMember(1000 + i, "user" + i, "User"));
+    }
+    for (int i = 0; i < 4; i++) {
+      soapFactory.memberServiceMock.addMember(
+          getMember(2000 + i, "group" + i, "Group"));
+      for (int j = 0; j < 5; j++) {
+        soapFactory.memberServiceMock.addMemberToGroup(
+            2000 + i,
+            soapFactory.memberServiceMock.getMemberById(1000 + (5 * i + j)));
+      }
+    }
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    Map<GroupPrincipal, List<Principal>> groupDefinitions =
+        adaptor.getGroups(soapFactory.newMemberService());
+    assertEquals(4, groupDefinitions.size());
+    assertEquals(Lists.newArrayList(
+            new UserPrincipal("user0"), new UserPrincipal("user1"),
+            new UserPrincipal("user2"), new UserPrincipal("user3"),
+            new UserPrincipal("user4")),
+        groupDefinitions.get(new GroupPrincipal("group0")));
+    assertEquals(Lists.newArrayList(
+            new UserPrincipal("user5"), new UserPrincipal("user6"),
+            new UserPrincipal("user7"), new UserPrincipal("user8"),
+            new UserPrincipal("user9")),
+        groupDefinitions.get(new GroupPrincipal("group1")));
+    assertEquals(Lists.newArrayList(
+            new UserPrincipal("user10"), new UserPrincipal("user11"),
+            new UserPrincipal("user12"), new UserPrincipal("user13"),
+            new UserPrincipal("user14")),
+        groupDefinitions.get(new GroupPrincipal("group2")));
+    assertEquals(Lists.newArrayList(
+            new UserPrincipal("user15"), new UserPrincipal("user16"),
+            new UserPrincipal("user17"), new UserPrincipal("user18"),
+            new UserPrincipal("user19")),
+        groupDefinitions.get(new GroupPrincipal("group3")));
+  }
+
+  @Test
+  public void testGetGroupsNested() throws InterruptedException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    for (int i = 0; i < 20; i++) {
+      soapFactory.memberServiceMock.addMember(
+          getMember(1000 + i, "user" + i, "User"));
+    }
+    for (int i = 0; i < 4; i++) {
+      soapFactory.memberServiceMock.addMember(
+          getMember(2000 + i, "group" + i, "Group"));
+    }
+    for (int i = 0; i < 3; i++) {
+      soapFactory.memberServiceMock.addMemberToGroup(
+          2000, soapFactory.memberServiceMock.getMemberById(1000 + i));
+    }
+    // Add a group to a group.
+    soapFactory.memberServiceMock.addMemberToGroup(
+        2001, soapFactory.memberServiceMock.getMemberById(2000));
+    soapFactory.memberServiceMock.addMemberToGroup(
+        2001, soapFactory.memberServiceMock.getMemberById(1010));
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    Map<GroupPrincipal, List<Principal>> groupDefinitions =
+        adaptor.getGroups(soapFactory.newMemberService());
+    assertEquals(2, groupDefinitions.size());
+    assertEquals(Lists.newArrayList(
+            new UserPrincipal("user0"), new UserPrincipal("user1"),
+            new UserPrincipal("user2")),
+        groupDefinitions.get(new GroupPrincipal("group0")));
+    assertEquals(Lists.newArrayList(
+            new GroupPrincipal("group0"), new UserPrincipal("user10")),
+        groupDefinitions.get(new GroupPrincipal("group1")));
+  }
+
+  @Test
+  public void testGetPublicAccessGroup() throws InterruptedException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    for (int i = 0; i < 20; i++) {
+      User user = new User();
+      user.setID(1000 + i);
+      user.setName("user" + i);
+      user.setType("User");
+      MemberPrivileges memberPrivileges = new MemberPrivileges();
+      memberPrivileges.setPublicAccessEnabled((i % 2) == 0);
+      user.setPrivileges(memberPrivileges);
+      soapFactory.memberServiceMock.addMember(user);
+    }
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    List<Principal> publicAccessGroup =
+        adaptor.getPublicAccessGroup(soapFactory.newMemberService());
+    assertEquals(Lists.newArrayList(
+            new UserPrincipal("user0"), new UserPrincipal("user2"),
+            new UserPrincipal("user4"), new UserPrincipal("user6"),
+            new UserPrincipal("user8"), new UserPrincipal("user10"),
+            new UserPrincipal("user12"), new UserPrincipal("user14"),
+            new UserPrincipal("user16"), new UserPrincipal("user18")),
+        publicAccessGroup);
+  }
+
   private class SoapFactoryMock implements SoapFactory {
     private AuthenticationMock authenticationMock;
     private DocumentManagementMock documentManagementMock;
@@ -2147,6 +2291,11 @@ public class OpentextAdaptorTest {
     @Override
     public MemberService newMemberService(
         DocumentManagement documentManagement) {
+      return Proxies.newProxyInstance(MemberService.class,
+          this.memberServiceMock);
+    }
+
+    private MemberService newMemberService() {
       return Proxies.newProxyInstance(MemberService.class,
           this.memberServiceMock);
     }
@@ -2209,10 +2358,17 @@ public class OpentextAdaptorTest {
 
   private class DocIdPusherMock {
     private List<DocId> docIds;
+    private Map<GroupPrincipal, List<Principal>> groupDefinitions;
 
     public DocId pushDocIds(Iterable<DocId> docIds) {
       this.docIds = Lists.newArrayList(docIds);
       return null;
+    }
+
+    public void pushGroupDefinitions(
+        Map<GroupPrincipal, List<Principal>> groupDefinitions,
+        boolean caseSensitive) {
+      this.groupDefinitions = groupDefinitions;
     }
   }
 
@@ -2403,6 +2559,72 @@ public class OpentextAdaptorTest {
         members = new ArrayList<Member>();
       }
       return members;
+    }
+
+    // Only supports searching by type.
+    public PageHandle searchForMembers(MemberSearchOptions searchOptions) {
+      List<Member> results = new ArrayList<Member>();
+      for (Member member : this.members) {
+        if (SearchFilter.GROUP.equals(searchOptions.getFilter())
+            && "Group".equals(member.getType())) {
+          results.add(member);
+        } else if (SearchFilter.USER.equals(searchOptions.getFilter())
+            && "User".equals(member.getType())) {
+          results.add(member);
+        }
+      }
+      if (results.size() == 0) {
+        return null;
+      }
+      return new PageHandleMock(results, searchOptions.getPageSize());
+    }
+
+    public MemberSearchResults getSearchResults(PageHandle pageHandle) {
+      return new MemberSearchResultsMock((PageHandleMock) pageHandle);
+    }
+  }
+
+  private class MemberSearchResultsMock extends MemberSearchResults {
+    List<Member> results;
+
+    private MemberSearchResultsMock(PageHandleMock pageHandle) {
+      super.setPageHandle(pageHandle);
+      this.results = pageHandle.getNextResults();
+    }
+
+    @Override
+    public List<Member> getMembers() {
+      return this.results;
+    }
+  }
+
+  private class PageHandleMock extends PageHandle {
+    private List<Member> results;
+    private int pageSize = -1;
+    private int index = 0;
+
+    private PageHandleMock(List<Member> results, int pageSize) {
+      this.results = results;
+      this.pageSize = pageSize;
+    }
+
+    List<Member> getNextResults() {
+      if (this.index >= this.results.size()) {
+        return null;
+      }
+      List<Member> nextResults = this.results.subList(this.index,
+          Math.min(this.index + this.pageSize, this.results.size()));
+      this.index += this.pageSize;
+      return nextResults;
+    }
+
+    /* As best I can tell, isFinalPage should be true when the
+     * final page has been returned, not when the next call to
+     * get results will return the final page.
+     */
+    @Override
+    public boolean isFinalPage() {
+      return this.index >= this.results.size();
     }
   }
 
