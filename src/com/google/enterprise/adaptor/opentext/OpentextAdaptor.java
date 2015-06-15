@@ -144,6 +144,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
   private Map<String, String> queryStrings;
   private Map<String, String> objectActions;
   private List<String> excludedNodeTypes;
+  private int currentVersionType;
   private boolean indexCategories;
   private boolean indexCategoryNames;
   private boolean indexSearchableAttributesOnly;
@@ -189,6 +190,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
     config.addKey("opentext.displayUrl.objAction.default", "properties");
     config.addKey("opentext.excludedNodeTypes", "");
     config.addKey("opentext.excludedNodeTypes.separator", ",");
+    config.addKey("opentext.currentVersionType", "-2");
     config.addKey("opentext.indexCategories", "true");
     config.addKey("opentext.indexCategoryNames", "true");
     config.addKey("opentext.indexSearchableAttributesOnly", "true");
@@ -325,6 +327,18 @@ public class OpentextAdaptor extends AbstractAdaptor {
         "opentext.excludedNodeTypes.separator: {0}", separator);
     this.excludedNodeTypes =
         OpentextAdaptor.getExcludedNodeTypes(excludedNodeTypes, separator);
+
+    String currentVersionType =
+        config.getValue("opentext.currentVersionType");
+    log.log(Level.CONFIG,
+        "opentext.currentVersionType: {0}", currentVersionType);
+    try {
+      this.currentVersionType = Integer.parseInt(currentVersionType);
+    } catch (NumberFormatException numberFormatException) {
+      throw new InvalidConfigurationException(
+          "opentext.currentVersionType: " + currentVersionType,
+        numberFormatException);
+    }
 
     String indexCategories = config.getValue("opentext.indexCategories");
     log.log(Level.CONFIG, "opentext.indexCategories: {0}", indexCategories);
@@ -875,9 +889,8 @@ public class OpentextAdaptor extends AbstractAdaptor {
       throw new UnsupportedOperationException(
           "Document does not support versions: " + opentextDocId);
     }
-
-    // 0 indicates the most recent version.
-    Version version = documentManagement.getVersion(documentNode.getID(), 0);
+    Version version = documentManagement.getVersion(documentNode.getID(),
+        this.currentVersionType);
     long versionNumber = version.getNumber();
     String contextId = documentManagement.getVersionContentsContext(
         documentNode.getID(), versionNumber);

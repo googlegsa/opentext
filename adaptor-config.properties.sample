@@ -39,6 +39,17 @@ opentext.publicAccessGroupEnabled = true|false
 opentext.excludedNodeTypes = WFMap, 384
 opentext.excludedNodeTypes.separator = ,
 
+# Version to retrieve for versioned nodes:
+# 0: current version of standard versioning node; current version
+# (major or minor) of major/minor versioning node
+# -1: current major version of major/minor versioning node
+# -2: current version of standard versioning node; current major version
+# of major/minor versioning node
+#
+# The user configured in opentext.username must have Reserve or
+# Delete Versions permissions in order to see minor versions.
+opentext.currentVersionType = -2
+
 # List of node features to be included. Use the same rules for
 # specifying node types as listed above for excludedNodeTypes.
 opentext.includedNodeFeatures.URL = Location
