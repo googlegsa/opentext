@@ -889,11 +889,6 @@ public class OpentextAdaptor extends AbstractAdaptor {
     if (contentType != null) {
       response.setContentType(contentType);
     }
-    XMLGregorianCalendar xmlCalendar = version.getModifyDate();
-    if (xmlCalendar != null) {
-      Date lastModifiedDate = xmlCalendar.toGregorianCalendar().getTime();
-      response.setLastModified(lastModifiedDate);
-    }
     response.setDisplayUrl(
         getDisplayUrl(documentNode.getType(), documentNode.getID()));
     InputStream inputStream = dataHandler.getInputStream();
@@ -1543,6 +1538,8 @@ public class OpentextAdaptor extends AbstractAdaptor {
     xmlCalendar = node.getModifyDate();
     if (xmlCalendar != null) {
       response.addMetadata("ModifyDate", getDateAsString(xmlCalendar));
+      Date lastModifiedDate = xmlCalendar.toGregorianCalendar().getTime();
+      response.setLastModified(lastModifiedDate);
     }
 
     if (node.getCreatedBy() != null) {
