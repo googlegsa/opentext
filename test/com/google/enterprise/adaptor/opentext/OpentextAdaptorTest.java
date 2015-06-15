@@ -625,12 +625,10 @@ public class OpentextAdaptorTest {
   @Test
   public void testDoDocument() throws IOException {
     SoapFactoryMock soapFactory = new SoapFactoryMock();
-
-    GregorianCalendar lastModified =
-        new GregorianCalendar(2015, 1, 3, 9, 42, 42);
     NodeMock documentNode =
         new NodeMock(3143, "Title of Document", "Document");
-    documentNode.setVersion(1, "text/plain", lastModified);
+    documentNode.setVersion(1, "text/plain",
+        new GregorianCalendar(2015, 1, 3, 9, 42, 42));
     soapFactory.documentManagementMock.addNode(documentNode);
 
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
@@ -649,7 +647,6 @@ public class OpentextAdaptorTest {
         documentNode, response);
 
     assertEquals("text/plain", responseMock.contentType);
-    assertEquals(lastModified.getTime(), responseMock.lastModified);
     assertEquals("http://example.com/otcs/livelink.exe" +
         "?func=ll&objAction=overview&objId=3143",
         responseMock.displayUrl.toString());
@@ -1232,6 +1229,8 @@ public class OpentextAdaptorTest {
         "Node Display Type", responseMetadata.get("DisplayType").get(0));
     assertEquals("-321", responseMetadata.get("VolumeID").get(0));
     assertEquals("test/mime-type", responseMetadata.get("MimeType").get(0));
+    assertEquals(node.getModifyDate().toGregorianCalendar().getTime(),
+        responseMock.lastModified);
   }
 
   @Test
