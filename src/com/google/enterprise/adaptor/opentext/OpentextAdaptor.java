@@ -889,8 +889,20 @@ public class OpentextAdaptor extends AbstractAdaptor {
       throw new UnsupportedOperationException(
           "Document does not support versions: " + opentextDocId);
     }
+    response.setDisplayUrl(
+        getDisplayUrl(documentNode.getType(), documentNode.getID()));
+
     Version version = documentManagement.getVersion(documentNode.getID(),
         this.currentVersionType);
+    long fileDataSize = version.getFileDataSize();
+    // The GSA does not support files larger than 2 GB.
+    if (fileDataSize == 0 || fileDataSize > (2L << 30)) {
+        // We must call getOutputStream to avoid a library error.
+        response.getOutputStream();
+        log.log(Level.FINE, "Skipping content for {0} based on size: {1}",
+            new Object[] { opentextDocId, fileDataSize });
+        return;
+    }
     long versionNumber = version.getNumber();
     String contextId = documentManagement.getVersionContentsContext(
         documentNode.getID(), versionNumber);
@@ -902,8 +914,6 @@ public class OpentextAdaptor extends AbstractAdaptor {
     if (contentType != null) {
       response.setContentType(contentType);
     }
-    response.setDisplayUrl(
-        getDisplayUrl(documentNode.getType(), documentNode.getID()));
     InputStream inputStream = dataHandler.getInputStream();
     try {
       if (inputStream != null) {

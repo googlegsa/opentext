@@ -671,6 +671,72 @@ public class OpentextAdaptorTest {
   }
 
   @Test
+  public void testDoDocumentEmpty() throws IOException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    NodeMock documentNode =
+        new NodeMock(3143, "Title of Document", "Document");
+    documentNode.setVersion(1, "text/plain",
+        new GregorianCalendar(2015, 1, 3, 9, 42, 42));
+    documentNode.getVersion().setFileDataSize(0L);
+    soapFactory.documentManagementMock.addNode(documentNode);
+
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+
+    ResponseMock responseMock = new ResponseMock();
+    Response response =
+        Proxies.newProxyInstance(Response.class, responseMock);
+
+    DocumentManagement documentManagement =
+        soapFactory.newDocumentManagement("token");
+    adaptor.doDocument(documentManagement,
+        new OpentextDocId(new DocId("2000/Document:3143")),
+        documentNode, response);
+
+    assertNull(responseMock.contentType);
+    assertEquals("http://example.com/otcs/livelink.exe"
+        + "?func=ll&objAction=overview&objId=3143",
+        responseMock.displayUrl.toString());
+    assertEquals("",
+        responseMock.outputStream.toString(UTF_8.name()));
+  }
+
+  @Test
+  public void testDoDocumentLarge() throws IOException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    NodeMock documentNode =
+        new NodeMock(3143, "Title of Document", "Document");
+    documentNode.setVersion(1, "text/plain",
+        new GregorianCalendar(2015, 1, 3, 9, 42, 42));
+    documentNode.getVersion().setFileDataSize(3L << 30);
+    soapFactory.documentManagementMock.addNode(documentNode);
+
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+
+    ResponseMock responseMock = new ResponseMock();
+    Response response =
+        Proxies.newProxyInstance(Response.class, responseMock);
+
+    DocumentManagement documentManagement =
+        soapFactory.newDocumentManagement("token");
+    adaptor.doDocument(documentManagement,
+        new OpentextDocId(new DocId("2000/Document:3143")),
+        documentNode, response);
+
+    assertNull(responseMock.contentType);
+    assertEquals("http://example.com/otcs/livelink.exe"
+        + "?func=ll&objAction=overview&objId=3143",
+        responseMock.displayUrl.toString());
+    assertEquals("",
+        responseMock.outputStream.toString(UTF_8.name()));
+  }
+
+  @Test
   public void testDocWithExcludedNodeType() throws IOException {
     SoapFactoryMock soapFactory = new SoapFactoryMock();
 
@@ -2478,6 +2544,7 @@ public class OpentextAdaptorTest {
   }
 
   private class ContentServiceMock {
+    private final static String defaultContent = "this is the content";
     public DataHandler downloadContent(String contextId) {
       DataSource dataSource = new DataSource() {
           public String getContentType() {
@@ -2861,6 +2928,8 @@ public class OpentextAdaptorTest {
     private long versionNumber;
     private String contentType;
     private GregorianCalendar modifyDate;
+    private long fileDataSize =
+        ContentServiceMock.defaultContent.getBytes(UTF_8).length;
 
     private VersionMock(long versionNumber, String contentType,
         GregorianCalendar modifyDate) {
@@ -2887,6 +2956,16 @@ public class OpentextAdaptorTest {
       } catch (DatatypeConfigurationException datatypeException) {
         return null;
       }
+    }
+
+    @Override
+    public long getFileDataSize() {
+      return this.fileDataSize;
+    }
+
+    @Override
+    public void setFileDataSize(long size) {
+      this.fileDataSize = size;
     }
   }
 
