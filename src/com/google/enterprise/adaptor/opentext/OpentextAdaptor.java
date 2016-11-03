@@ -147,6 +147,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
   private int currentVersionType;
   private boolean indexCategories;
   private boolean indexCategoryNames;
+  private boolean indexFolders;
   private boolean indexSearchableAttributesOnly;
   private List<String> includedCategories;
   private List<String> excludedCategories;
@@ -190,6 +191,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
     config.addKey("opentext.displayUrl.objAction.default", "properties");
     config.addKey("opentext.excludedNodeTypes", "");
     config.addKey("opentext.excludedNodeTypes.separator", ",");
+    config.addKey("opentext.indexFolders", "true");
     config.addKey("opentext.currentVersionType", "-2");
     config.addKey("opentext.indexCategories", "true");
     config.addKey("opentext.indexCategoryNames", "true");
@@ -319,6 +321,12 @@ public class OpentextAdaptor extends AbstractAdaptor {
     log.log(Level.CONFIG, "opentext.displayUrl.objAction: {0}",
         this.objectActions);
 
+    // excludedNodeTypes may override the value for indexFolders,
+    // so read this config property first.
+    String indexFolders = config.getValue("opentext.indexFolders");
+    log.log(Level.CONFIG, "opentext.indexFolders: {0}", indexFolders);
+    this.indexFolders = Boolean.parseBoolean(indexFolders);
+
     String excludedNodeTypes = config.getValue("opentext.excludedNodeTypes");
     separator = config.getValue("opentext.excludedNodeTypes.separator");
     log.log(Level.CONFIG,
@@ -327,6 +335,12 @@ public class OpentextAdaptor extends AbstractAdaptor {
         "opentext.excludedNodeTypes.separator: {0}", separator);
     this.excludedNodeTypes =
         OpentextAdaptor.getExcludedNodeTypes(excludedNodeTypes, separator);
+    if (this.excludedNodeTypes.contains("Folder")) {
+      this.excludedNodeTypes.remove("Folder");
+      this.indexFolders = false;
+      log.log(Level.WARNING, "Removed Folder type from excludedNodeTypes;"
+          + " folders will be crawled but not indexed.");
+    }
 
     String currentVersionType =
         config.getValue("opentext.currentVersionType");
@@ -568,10 +582,15 @@ public class OpentextAdaptor extends AbstractAdaptor {
 
     log.log(Level.FINER, "getDocContent for {0} with type {1}",
         new String[] { opentextDocId.toString(), node.getType() });
+
+    if (node.getType().equals("Folder") && !this.indexFolders) {
+      resp.setNoIndex(true);
+    }
     doAcl(documentManagement, opentextDocId, node, resp);
     doCategories(documentManagement, node, resp);
     doNodeFeatures(node, resp);
     doNodeProperties(documentManagement, node, resp);
+    resp.setDisplayUrl(getDisplayUrl(node.getType(), node.getID()));
     switch (node.getType()) {
       case "Collection":
         doCollection(documentManagement, opentextDocId, node, resp);
@@ -764,8 +783,6 @@ public class OpentextAdaptor extends AbstractAdaptor {
     }
 
     response.setContentType("text/html; charset=" + CHARSET.name());
-    response.setDisplayUrl(
-        getDisplayUrl(containerNode.getType(), containerNode.getID()));
     Writer writer = new OutputStreamWriter(response.getOutputStream(),
         CHARSET);
     HtmlResponseWriter responseWriter = new HtmlResponseWriter(
@@ -889,8 +906,6 @@ public class OpentextAdaptor extends AbstractAdaptor {
       throw new UnsupportedOperationException(
           "Document does not support versions: " + opentextDocId);
     }
-    response.setDisplayUrl(
-        getDisplayUrl(documentNode.getType(), documentNode.getID()));
 
     Version version = documentManagement.getVersion(documentNode.getID(),
         this.currentVersionType);
@@ -966,7 +981,6 @@ public class OpentextAdaptor extends AbstractAdaptor {
   void doNode(DocumentManagement documentManagement,
       OpentextDocId opentextDocId, Node node, Response response)
       throws IOException {
-    response.setDisplayUrl(getDisplayUrl(node.getType(), node.getID()));
     response.setContentType("text/html; charset=" + CHARSET.name());
     Writer writer = new OutputStreamWriter(response.getOutputStream(),
         CHARSET);
@@ -1203,7 +1217,6 @@ public class OpentextAdaptor extends AbstractAdaptor {
 
   private void writeHtmlResponse(Response response, Node node,
       String header, String... body) throws IOException {
-    response.setDisplayUrl(getDisplayUrl(node.getType(), node.getID()));
     response.setContentType("text/html; charset=" + CHARSET.name());
     Writer writer = new OutputStreamWriter(response.getOutputStream(),
         CHARSET);

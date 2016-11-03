@@ -39,6 +39,9 @@ opentext.publicAccessGroupEnabled = true|false
 opentext.excludedNodeTypes = WFMap, 384
 opentext.excludedNodeTypes.separator = ,
 
+# Indicates whether to index folders and their metadata or not.
+# opentext.indexFolders = true
+
 # Version to retrieve for versioned nodes:
 # 0: current version of standard versioning node; current version
 # (major or minor) of major/minor versioning node

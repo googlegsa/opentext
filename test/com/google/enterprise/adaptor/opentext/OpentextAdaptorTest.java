@@ -352,6 +352,9 @@ public class OpentextAdaptorTest {
 
   @Test
   public void testGetExcludedNodeTypes() {
+    // init will remove "Folder" from this property, but
+    // getExcludedNodeTypes simply reads and processes the config
+    // value as entered.
     List<String> excludedNodeTypes =
         OpentextAdaptor.getExcludedNodeTypes("Folder, 432", ",");
     assertEquals(
@@ -363,6 +366,18 @@ public class OpentextAdaptorTest {
     List<String> excludedNodeTypes =
         OpentextAdaptor.getExcludedNodeTypes("", ",");
     assertEquals(0, excludedNodeTypes.size());
+  }
+
+  @Test
+  public void testExcludedNodeTypesConfiguredWithFolder() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.excludedNodeTypes", "Folder, Document");
+    adaptor.init(context);
+    List<String> excludedNodeTypes = adaptor.getExcludedNodeTypes();
+    assertEquals(Lists.newArrayList("Document"), excludedNodeTypes);
   }
 
   @Test
@@ -525,6 +540,78 @@ public class OpentextAdaptorTest {
   }
 
   @Test
+  public void testGetDocContentIndexFoldersTrue() throws IOException {
+    Member owner = getMember(1001, "testuser1", "User");
+    NodeRights nodeRights = new NodeRights();
+    nodeRights.setOwnerRight(getNodeRight(owner.getID(), "Owner"));
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    NodeMock node = new NodeMock(3143, "Folder Name", "Folder");
+    node.setStartPointId(2000);
+    node.setPath(node.getName());
+    soapFactory.documentManagementMock.addNode(node);
+    soapFactory.documentManagementMock
+        .setNodeRights(node.getID(), nodeRights);
+    soapFactory.memberServiceMock.addMember(owner);
+
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.indexFolders", "true");
+    adaptor.init(context);
+
+    ResponseMock responseMock = new ResponseMock();
+    Response response =
+        Proxies.newProxyInstance(Response.class, responseMock);
+    RequestMock requestMock = new RequestMock(
+        new DocId("EnterpriseWS/Folder+Name:3143"));
+    Request request = Proxies.newProxyInstance(Request.class,
+        requestMock);
+    adaptor.getDocContent(request, response);
+    assertEquals("http://example.com/otcs/livelink.exe"
+        + "?func=ll&objAction=properties&objId=3143",
+        responseMock.displayUrl.toString());
+    assertFalse(responseMock.noIndex);
+  }
+
+  @Test
+  public void testGetDocContentIndexFoldersFalse() throws IOException {
+    Member owner = getMember(1001, "testuser1", "User");
+    NodeRights nodeRights = new NodeRights();
+    nodeRights.setOwnerRight(getNodeRight(owner.getID(), "Owner"));
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    NodeMock node = new NodeMock(3143, "Folder Name", "Folder");
+    node.setStartPointId(2000);
+    node.setPath(node.getName());
+    soapFactory.documentManagementMock.addNode(node);
+    soapFactory.documentManagementMock
+        .setNodeRights(node.getID(), nodeRights);
+    soapFactory.memberServiceMock.addMember(owner);
+
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.indexFolders", "false");
+    adaptor.init(context);
+
+    ResponseMock responseMock = new ResponseMock();
+    Response response =
+        Proxies.newProxyInstance(Response.class, responseMock);
+    RequestMock requestMock = new RequestMock(
+        new DocId("EnterpriseWS/Folder+Name:3143"));
+    Request request = Proxies.newProxyInstance(Request.class,
+        requestMock);
+    adaptor.getDocContent(request, response);
+    assertEquals("http://example.com/otcs/livelink.exe"
+        + "?func=ll&objAction=properties&objId=3143",
+        responseMock.displayUrl.toString());
+    assertTrue(responseMock.noIndex);
+    assertEquals(
+        Lists.newArrayList("3143"), responseMock.getMetadata().get("ID"));
+    assertEquals(Lists.newArrayList("Folder Name"),
+        responseMock.getMetadata().get("Name"));
+  }
+
+  @Test
   public void testDoContainer() throws IOException {
     SoapFactoryMock soapFactory = new SoapFactoryMock();
 
@@ -663,9 +750,6 @@ public class OpentextAdaptorTest {
         documentNode, response);
 
     assertEquals("text/plain", responseMock.contentType);
-    assertEquals("http://example.com/otcs/livelink.exe" +
-        "?func=ll&objAction=overview&objId=3143",
-        responseMock.displayUrl.toString());
     assertEquals("this is the content",
         responseMock.outputStream.toString("UTF-8"));
   }
@@ -696,9 +780,6 @@ public class OpentextAdaptorTest {
         documentNode, response);
 
     assertNull(responseMock.contentType);
-    assertEquals("http://example.com/otcs/livelink.exe"
-        + "?func=ll&objAction=overview&objId=3143",
-        responseMock.displayUrl.toString());
     assertEquals("",
         responseMock.outputStream.toString(UTF_8.name()));
   }
@@ -729,9 +810,6 @@ public class OpentextAdaptorTest {
         documentNode, response);
 
     assertNull(responseMock.contentType);
-    assertEquals("http://example.com/otcs/livelink.exe"
-        + "?func=ll&objAction=overview&objId=3143",
-        responseMock.displayUrl.toString());
     assertEquals("",
         responseMock.outputStream.toString(UTF_8.name()));
   }
@@ -2991,6 +3069,7 @@ public class OpentextAdaptorTest {
         new HashMap<String, List<String>>();
     private List<String> anchors = new ArrayList<String>();
     private Acl acl;
+    private boolean noIndex;
 
     ResponseMock() {
       this.outputStream = new ByteArrayOutputStream();
@@ -3031,6 +3110,10 @@ public class OpentextAdaptorTest {
 
     public void setAcl(Acl acl) {
       this.acl = acl;
+    }
+
+    public void setNoIndex(boolean noIndex) {
+      this.noIndex = noIndex;
     }
 
     private boolean notFound() {
