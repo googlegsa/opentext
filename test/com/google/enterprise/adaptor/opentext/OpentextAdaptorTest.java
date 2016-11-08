@@ -702,8 +702,8 @@ public class OpentextAdaptorTest {
 
   @Test
   public void testDoDocumentNoVersions() throws IOException {
-    OpentextDocId testDocId =
-        new OpentextDocId(new DocId("2000/Document Name:3143"));
+    DocId docId = new DocId("2000/Document Name:3143");
+    OpentextDocId testDocId = new OpentextDocId(docId);
 
     thrown.expect(RuntimeException.class);
     thrown.expectMessage(
@@ -719,17 +719,22 @@ public class OpentextAdaptorTest {
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
 
+    RequestMock requestMock = new RequestMock(docId);
+    Request request = Proxies.newProxyInstance(Request.class, requestMock);
     ResponseMock responseMock = new ResponseMock();
     Response response = Proxies.newProxyInstance(Response.class,
         responseMock);
 
     DocumentManagement documentManagement =
         soapFactory.newDocumentManagement("token");
-    adaptor.doDocument(documentManagement, testDocId, documentNode, response);
+    adaptor.doDocument(documentManagement, testDocId,
+        documentNode, request, response);
   }
 
   @Test
   public void testDoDocument() throws IOException {
+    DocId docId = new DocId("2000/Document:3143");
+    OpentextDocId testDocId = new OpentextDocId(docId);
     SoapFactoryMock soapFactory = new SoapFactoryMock();
     NodeMock documentNode =
         new NodeMock(3143, "Title of Document", "Document");
@@ -742,15 +747,16 @@ public class OpentextAdaptorTest {
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
 
+    RequestMock requestMock = new RequestMock(docId);
+    Request request = Proxies.newProxyInstance(Request.class, requestMock);
     ResponseMock responseMock = new ResponseMock();
     Response response = Proxies.newProxyInstance(Response.class,
         responseMock);
 
     DocumentManagement documentManagement =
         soapFactory.newDocumentManagement("token");
-    adaptor.doDocument(documentManagement,
-        new OpentextDocId(new DocId("2000/Document:3143")),
-        documentNode, response);
+    adaptor.doDocument(documentManagement, testDocId,
+        documentNode, request, response);
 
     assertEquals("text/plain", responseMock.contentType);
     assertEquals("this is the content",
@@ -759,6 +765,8 @@ public class OpentextAdaptorTest {
 
   @Test
   public void testDoDocumentEmpty() throws IOException {
+    DocId docId = new DocId("2000/Document:3143");
+    OpentextDocId testDocId = new OpentextDocId(docId);
     SoapFactoryMock soapFactory = new SoapFactoryMock();
     NodeMock documentNode =
         new NodeMock(3143, "Title of Document", "Document");
@@ -772,15 +780,16 @@ public class OpentextAdaptorTest {
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
 
+    RequestMock requestMock = new RequestMock(docId);
+    Request request = Proxies.newProxyInstance(Request.class, requestMock);
     ResponseMock responseMock = new ResponseMock();
     Response response =
         Proxies.newProxyInstance(Response.class, responseMock);
 
     DocumentManagement documentManagement =
         soapFactory.newDocumentManagement("token");
-    adaptor.doDocument(documentManagement,
-        new OpentextDocId(new DocId("2000/Document:3143")),
-        documentNode, response);
+    adaptor.doDocument(documentManagement, testDocId,
+        documentNode, request, response);
 
     assertNull(responseMock.contentType);
     assertEquals("",
@@ -789,6 +798,8 @@ public class OpentextAdaptorTest {
 
   @Test
   public void testDoDocumentLarge() throws IOException {
+    DocId docId = new DocId("2000/Document:3143");
+    OpentextDocId testDocId = new OpentextDocId(docId);
     SoapFactoryMock soapFactory = new SoapFactoryMock();
     NodeMock documentNode =
         new NodeMock(3143, "Title of Document", "Document");
@@ -802,19 +813,57 @@ public class OpentextAdaptorTest {
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
 
+    RequestMock requestMock = new RequestMock(docId);
+    Request request = Proxies.newProxyInstance(Request.class, requestMock);
     ResponseMock responseMock = new ResponseMock();
     Response response =
         Proxies.newProxyInstance(Response.class, responseMock);
 
     DocumentManagement documentManagement =
         soapFactory.newDocumentManagement("token");
-    adaptor.doDocument(documentManagement,
-        new OpentextDocId(new DocId("2000/Document:3143")),
-        documentNode, response);
+    adaptor.doDocument(documentManagement, testDocId,
+        documentNode, request, response);
 
     assertNull(responseMock.contentType);
     assertEquals("",
         responseMock.outputStream.toString(UTF_8.name()));
+  }
+
+  @Test
+  public void testDoDocumentNotModified() throws IOException {
+    XMLGregorianCalendar fileModifyDate =
+        getXmlGregorianCalendar(2015, 6, 6, 12, 12, 12);
+    Date lastAccessTime = new Date(
+        new GregorianCalendar(2016, 6, 6, 12, 12, 12).getTimeInMillis());;
+
+    DocId docId = new DocId("2000/Document:3143");
+    OpentextDocId testDocId = new OpentextDocId(docId);
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    NodeMock documentNode =
+        new NodeMock(3143, "Title of Document", "Document");
+    documentNode.setVersion(1, "text/plain",
+        new GregorianCalendar(2015, 1, 3, 9, 42, 42));
+    documentNode.getVersion().setFileModifyDate(fileModifyDate);
+    soapFactory.documentManagementMock.addNode(documentNode);
+
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+
+    RequestMock requestMock = new RequestMock(docId, lastAccessTime);
+    Request request = Proxies.newProxyInstance(Request.class, requestMock);
+    ResponseMock responseMock = new ResponseMock();
+    Response response =
+        Proxies.newProxyInstance(Response.class, responseMock);
+
+    DocumentManagement documentManagement =
+        soapFactory.newDocumentManagement("token");
+    adaptor.doDocument(documentManagement, testDocId,
+        documentNode, request, response);
+
+    assertNull(responseMock.contentType);
+    assertTrue(responseMock.noContent);
   }
 
   @Test
@@ -3053,13 +3102,32 @@ public class OpentextAdaptorTest {
 
   private class RequestMock {
     private DocId docId;
+    private Date lastAccessTime;
 
     RequestMock(DocId docId) {
       this.docId = docId;
     }
 
+    RequestMock(DocId docId, Date lastAccessTime) {
+      this.docId = docId;
+      this.lastAccessTime = lastAccessTime;
+    }
+
+    public boolean canRespondWithNoContent(Date lastModified) {
+      return !hasChangedSinceLastAccess(lastModified);
+    }
+
     public DocId getDocId() {
       return this.docId;
+    }
+
+    public Date getLastAccessTime() {
+      return this.lastAccessTime;
+    }
+
+    public boolean hasChangedSinceLastAccess(Date lastModified) {
+      return (lastAccessTime == null || lastModified == null) ? true
+          : lastModified.after(lastAccessTime);
     }
   }
 
@@ -3068,6 +3136,7 @@ public class OpentextAdaptorTest {
     private String contentType;
     private Date lastModified;
     private URI displayUrl;
+    private boolean noContent = false;
     private boolean notFound = false;
     private Map<String, List<String>> metadata =
         new HashMap<String, List<String>>();
@@ -3093,6 +3162,10 @@ public class OpentextAdaptorTest {
 
     public void setDisplayUrl(URI displayUrl) {
       this.displayUrl = displayUrl;
+    }
+
+    public void respondNoContent() {
+      this.noContent = true;
     }
 
     public void respondNotFound() {

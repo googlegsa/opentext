@@ -123,6 +123,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
       = Logger.getLogger(OpentextAdaptor.class.getName());
   /** Charset used in generated HTML responses. */
   private static final Charset CHARSET = Charset.forName("UTF-8");
+  private static final long ONE_DAY_MILLIS = 24 * 60 * 60 * 1000L;
 
   public static void main(String[] args) {
     AbstractAdaptor.main(new OpentextAdaptor(), args);
@@ -597,7 +598,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
       case "GenericNode:335": // XML DTD
         // fall through
       case "Document":
-        doDocument(documentManagement, opentextDocId, node, resp);
+        doDocument(documentManagement, opentextDocId, node, req, resp);
         break;
       case "Milestone":
         doMilestone(documentManagement, opentextDocId, node, resp);
@@ -897,8 +898,8 @@ public class OpentextAdaptor extends AbstractAdaptor {
    */
   @VisibleForTesting
   void doDocument(DocumentManagement documentManagement,
-      OpentextDocId opentextDocId, Node documentNode, Response response)
-      throws IOException {
+      OpentextDocId opentextDocId, Node documentNode,
+      Request request, Response response) throws IOException {
     if (!documentNode.isIsVersionable()) {
       throw new UnsupportedOperationException(
           "Document does not support versions: " + opentextDocId);
@@ -906,6 +907,18 @@ public class OpentextAdaptor extends AbstractAdaptor {
 
     Version version = documentManagement.getVersion(documentNode.getID(),
         this.currentVersionType);
+    XMLGregorianCalendar fileModifyDate = version.getFileModifyDate();
+    if (fileModifyDate != null
+        && request.canRespondWithNoContent(
+            new Date(fileModifyDate.toGregorianCalendar().getTimeInMillis()
+                + ONE_DAY_MILLIS))) {
+      // To avoid issues with time zones, we only count an object as
+      // unmodified if its last modified time is more than a day before
+      // the last crawl time.
+      log.log(Level.FINER, "Content not modified: " + opentextDocId);
+      response.respondNoContent();
+      return;
+    }
     long fileDataSize = version.getFileDataSize();
     // The GSA does not support files larger than 2 GB.
     if (fileDataSize == 0 || fileDataSize > (2L << 30)) {
