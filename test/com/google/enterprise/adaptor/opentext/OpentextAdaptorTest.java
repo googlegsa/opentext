@@ -16,9 +16,12 @@ package com.google.enterprise.adaptor.opentext;
 
 import static com.google.enterprise.adaptor.opentext.OpentextAdaptor.SoapFactory;
 import static com.google.enterprise.adaptor.opentext.OpentextAdaptor.SoapFactoryImpl;
-import static org.junit.Assert.*;
-
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
@@ -50,7 +53,6 @@ import com.opentext.livelink.service.core.ContentService;
 import com.opentext.livelink.service.core.DateValue;
 import com.opentext.livelink.service.core.IntegerValue;
 import com.opentext.livelink.service.core.PageHandle;
-import com.opentext.livelink.service.core.PrimitiveValue;
 import com.opentext.livelink.service.core.RowValue;
 import com.opentext.livelink.service.core.StringValue;
 import com.opentext.livelink.service.core.TableValue;
@@ -87,7 +89,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.lang.reflect.Proxy;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -96,7 +97,6 @@ import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -112,6 +112,9 @@ import javax.xml.soap.SOAPFault;
 import javax.xml.ws.BindingProvider;
 import javax.xml.ws.soap.SOAPFaultException;
 
+/**
+ * Tests the OpentextAdaptor class.
+ */
 public class OpentextAdaptorTest {
   @BeforeClass
   public static void setUpClass() {
@@ -665,16 +668,16 @@ public class OpentextAdaptorTest {
     adaptor.init(context);
 
     URI displayUrl = adaptor.getDisplayUrl("Document", 12345);
-    assertEquals("http://example.com/otcs/livelink.exe" +
-        "?func=ll&objAction=overview&objId=12345", displayUrl.toString());
+    assertEquals("http://example.com/otcs/livelink.exe"
+        + "?func=ll&objAction=overview&objId=12345", displayUrl.toString());
 
     displayUrl = adaptor.getDisplayUrl("UnknownType", 12345);
-    assertEquals("http://example.com/otcs/livelink.exe" +
-        "?func=ll&objAction=properties&objId=12345", displayUrl.toString());
+    assertEquals("http://example.com/otcs/livelink.exe"
+        + "?func=ll&objAction=properties&objId=12345", displayUrl.toString());
 
     displayUrl = adaptor.getDisplayUrl("GenericNode:111", 12345);
-    assertEquals("http://example.com/otcs/livelink.exe" +
-        "?func=ll&objAction=actionFor111&objId=12345", displayUrl.toString());
+    assertEquals("http://example.com/otcs/livelink.exe"
+        + "?func=ll&objAction=actionFor111&objId=12345", displayUrl.toString());
   }
 
   @Test
@@ -2553,8 +2556,9 @@ public class OpentextAdaptorTest {
     }
 
     public Node getNode(long nodeId) {
-      if (nodeId == 1002) // Invalid ID for testing.
+      if (nodeId == 1002) { // Invalid ID for testing.
         return null;
+      }
       return findNode(nodeId);
     }
 
@@ -2567,8 +2571,8 @@ public class OpentextAdaptorTest {
 
     public Node getNodeByPath(long containerNodeId, List<String> path) {
       for (NodeMock node : this.nodes) {
-        if (node.getStartPointId() == containerNodeId &&
-            node.getPath().equals(path)) {
+        if (node.getStartPointId() == containerNodeId
+            && node.getPath().equals(path)) {
           return node;
         }
       }
@@ -2585,8 +2589,8 @@ public class OpentextAdaptorTest {
         if (nodePath == null) {
           continue;
         }
-        if ((containerPath.size() + 1) == nodePath.size() &&
-            containerPath.equals(nodePath.subList(0, nodePath.size() - 1))) {
+        if ((containerPath.size() + 1) == nodePath.size()
+            && containerPath.equals(nodePath.subList(0, nodePath.size() - 1))) {
           results.add(node);
         }
       }
@@ -2622,7 +2626,8 @@ public class OpentextAdaptorTest {
   }
 
   private class ContentServiceMock {
-    private final static String defaultContent = "this is the content";
+    private static final String DEFAULT_CONTENT = "this is the content";
+
     public DataHandler downloadContent(String contextId) {
       DataSource dataSource = new DataSource() {
           public String getContentType() {
@@ -2630,8 +2635,7 @@ public class OpentextAdaptorTest {
           }
 
           public InputStream getInputStream() throws IOException {
-            return new ByteArrayInputStream(
-                "this is the content".getBytes(UTF_8));
+            return new ByteArrayInputStream(DEFAULT_CONTENT.getBytes(UTF_8));
           }
 
           public String getName() {
@@ -3007,7 +3011,7 @@ public class OpentextAdaptorTest {
     private String contentType;
     private GregorianCalendar modifyDate;
     private long fileDataSize =
-        ContentServiceMock.defaultContent.getBytes(UTF_8).length;
+        ContentServiceMock.DEFAULT_CONTENT.getBytes(UTF_8).length;
 
     private VersionMock(long versionNumber, String contentType,
         GregorianCalendar modifyDate) {

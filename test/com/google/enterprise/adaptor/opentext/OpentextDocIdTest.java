@@ -14,7 +14,7 @@
 
 package com.google.enterprise.adaptor.opentext;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 
 import com.google.common.collect.Lists;
 import com.google.enterprise.adaptor.DocId;
@@ -23,9 +23,11 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
-import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 
+/**
+ * Tests the OpentextDocId class.
+ */
 public class OpentextDocIdTest {
   @Rule
   public ExpectedException thrown = ExpectedException.none();

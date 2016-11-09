@@ -20,7 +20,6 @@ import com.google.enterprise.adaptor.DocId;
 import com.google.enterprise.adaptor.DocIdEncoder;
 import com.google.enterprise.adaptor.SensitiveValueDecoder;
 
-import java.lang.reflect.Proxy;
 import java.net.URI;
 
 class ProxyAdaptorContext {

@@ -20,7 +20,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.enterprise.adaptor.AbstractAdaptor;
 import com.google.enterprise.adaptor.Acl;
-import com.google.enterprise.adaptor.Acl.Builder;
 import com.google.enterprise.adaptor.AdaptorContext;
 import com.google.enterprise.adaptor.Config;
 import com.google.enterprise.adaptor.DocId;
@@ -59,7 +58,6 @@ import com.opentext.livelink.service.docman.AttributeGroup;
 import com.opentext.livelink.service.docman.AttributeGroupDefinition;
 import com.opentext.livelink.service.docman.DocumentManagement;
 import com.opentext.livelink.service.docman.DocumentManagement_Service;
-import com.opentext.livelink.service.docman.GetNodesInContainerOptions;
 import com.opentext.livelink.service.docman.Metadata;
 import com.opentext.livelink.service.docman.Node;
 import com.opentext.livelink.service.docman.NodeFeature;
@@ -89,7 +87,6 @@ import java.io.OutputStreamWriter;
 import java.io.UnsupportedEncodingException;
 import java.io.Writer;
 import java.net.URI;
-import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.Charset;
 import java.text.MessageFormat;
@@ -1343,10 +1340,10 @@ public class OpentextAdaptor extends AbstractAdaptor {
       return false;
     }
     String categoryId = attributeGroup.getKey().substring(0, index);
-    if (((this.includedCategories != null) &&
-            !this.includedCategories.contains(categoryId)) ||
-        ((this.excludedCategories != null) &&
-            this.excludedCategories.contains(categoryId))) {
+    if (((this.includedCategories != null)
+            && !this.includedCategories.contains(categoryId))
+        || ((this.excludedCategories != null)
+            && this.excludedCategories.contains(categoryId))) {
       return false;
     }
     return true;
@@ -1376,9 +1373,10 @@ public class OpentextAdaptor extends AbstractAdaptor {
           List<Attribute> setAttributes =
               ((SetAttribute) attribute).getAttributes();
           for (Attribute setAttribute : setAttributes) {
-            if (setAttribute instanceof PrimitiveAttribute)
+            if (setAttribute instanceof PrimitiveAttribute) {
               this.attributeDefinitions.put(
                   setAttribute.getKey(), setAttribute);
+            }
             if (attribute instanceof UserAttribute) {
               this.categoriesWithUserAttributes
                   .add(categoryDefinition.getKey());

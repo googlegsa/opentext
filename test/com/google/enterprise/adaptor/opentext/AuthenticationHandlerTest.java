@@ -14,13 +14,13 @@
 
 package com.google.enterprise.adaptor.opentext;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
-import java.io.IOException;
 import java.util.Iterator;
 
 import javax.xml.soap.MessageFactory;
@@ -32,6 +32,9 @@ import javax.xml.soap.SOAPMessage;
 import javax.xml.ws.handler.MessageContext;
 import javax.xml.ws.handler.soap.SOAPMessageContext;
 
+/**
+ * Tests the AuthenticationHandler class.
+ */
 public class AuthenticationHandlerTest {
   @Rule
   public ExpectedException thrown = ExpectedException.none();
