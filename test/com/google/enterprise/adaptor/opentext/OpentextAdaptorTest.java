@@ -417,6 +417,54 @@ public class OpentextAdaptorTest {
   }
 
   @Test
+  public void testGetDocIdsMarkPublicTrue() throws InterruptedException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("adaptor.markAllDocsAsPublic", "true");
+    adaptor.init(context);
+
+    soapFactory.memberServiceMock.addMember(
+        getMember(1000, "user1", "User"));
+    soapFactory.memberServiceMock.addMember(
+        getMember(2000, "group1", "Group"));
+    soapFactory.memberServiceMock.addMemberToGroup(
+        2000, soapFactory.memberServiceMock.getMemberById(1000));
+
+    DocIdPusherMock docIdPusherMock = new DocIdPusherMock();
+    adaptor.getDocIds(
+        Proxies.newProxyInstance(DocIdPusher.class, docIdPusherMock));
+    assertEquals(null, docIdPusherMock.groupDefinitions);
+  }
+
+  @Test
+  public void testGetDocIdsMarkPublicFalse() throws InterruptedException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("adaptor.markAllDocsAsPublic", "false");
+    adaptor.init(context);
+
+    soapFactory.memberServiceMock.addMember(
+        getMember(1000, "user1", "User"));
+    soapFactory.memberServiceMock.addMember(
+        getMember(2000, "group1", "Group"));
+    soapFactory.memberServiceMock.addMemberToGroup(
+        2000, soapFactory.memberServiceMock.getMemberById(1000));
+
+    DocIdPusherMock docIdPusherMock = new DocIdPusherMock();
+    adaptor.getDocIds(
+        Proxies.newProxyInstance(DocIdPusher.class, docIdPusherMock));
+    Map<GroupPrincipal, List<Principal>> expected =
+        new HashMap<GroupPrincipal, List<Principal>>();
+    expected.put(new GroupPrincipal("group1"),
+        Lists.newArrayList(new UserPrincipal("user1")));
+    assertEquals(expected, docIdPusherMock.groupDefinitions);
+  }
+
+  @Test
   public void testGetNodeStartPoint() throws InterruptedException {
     SoapFactoryMock soapFactory = new SoapFactoryMock();
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
@@ -612,6 +660,70 @@ public class OpentextAdaptorTest {
         Lists.newArrayList("3143"), responseMock.getMetadata().get("ID"));
     assertEquals(Lists.newArrayList("Folder Name"),
         responseMock.getMetadata().get("Name"));
+  }
+
+  @Test
+  public void testGetDocContentMarkPublicTrue() throws IOException {
+    Member owner = getMember(1001, "testuser1", "User");
+    NodeRights nodeRights = new NodeRights();
+    nodeRights.setOwnerRight(getNodeRight(owner.getID(), "Owner"));
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    NodeMock node = new NodeMock(3143, "Folder Name", "Folder");
+    node.setStartPointId(2000);
+    node.setPath(node.getName());
+    soapFactory.documentManagementMock.addNode(node);
+    soapFactory.documentManagementMock
+        .setNodeRights(node.getID(), nodeRights);
+    soapFactory.memberServiceMock.addMember(owner);
+
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("adaptor.markAllDocsAsPublic", "true");
+    adaptor.init(context);
+
+    ResponseMock responseMock = new ResponseMock();
+    Response response =
+        Proxies.newProxyInstance(Response.class, responseMock);
+    RequestMock requestMock = new RequestMock(
+        new DocId("EnterpriseWS/Folder+Name:3143"));
+    Request request = Proxies.newProxyInstance(Request.class,
+        requestMock);
+    adaptor.getDocContent(request, response);
+    assertEquals(null, responseMock.getAcl());
+  }
+
+  @Test
+  public void testGetDocContentMarkPublicFalse() throws IOException {
+    Member owner = getMember(1001, "testuser1", "User");
+    NodeRights nodeRights = new NodeRights();
+    nodeRights.setOwnerRight(getNodeRight(owner.getID(), "Owner"));
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    NodeMock node = new NodeMock(3143, "Folder Name", "Folder");
+    node.setStartPointId(2000);
+    node.setPath(node.getName());
+    soapFactory.documentManagementMock.addNode(node);
+    soapFactory.documentManagementMock
+        .setNodeRights(node.getID(), nodeRights);
+    soapFactory.memberServiceMock.addMember(owner);
+
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("adaptor.markAllDocsAsPublic", "false");
+    adaptor.init(context);
+
+    ResponseMock responseMock = new ResponseMock();
+    Response response =
+        Proxies.newProxyInstance(Response.class, responseMock);
+    RequestMock requestMock = new RequestMock(
+        new DocId("EnterpriseWS/Folder+Name:3143"));
+    Request request = Proxies.newProxyInstance(Request.class,
+        requestMock);
+    adaptor.getDocContent(request, response);
+    Acl expected = new Acl.Builder().setPermitUsers(
+        Sets.newHashSet(new UserPrincipal("testuser1"))).build();
+    assertEquals(expected, responseMock.getAcl());
   }
 
   @Test

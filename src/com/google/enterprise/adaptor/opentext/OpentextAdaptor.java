@@ -135,6 +135,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
   private String password;
   private String adminUsername;
   private String adminPassword;
+  private boolean markAllDocsAsPublic;
   private boolean publicAccessGroupEnabled;
   /** Configured start points, with unknown values removed. */
   private List<StartPoint> startPoints;
@@ -216,6 +217,11 @@ public class OpentextAdaptor extends AbstractAdaptor {
     Config config = context.getConfig();
     this.soapFactory.configure(config);
 
+    this.markAllDocsAsPublic =
+        Boolean.parseBoolean(config.getValue("adaptor.markAllDocsAsPublic"));
+    log.log(Level.CONFIG, "adaptor.markAllDocsAsPublic: {0}",
+        markAllDocsAsPublic);
+
     String webServicesUrl = config.getValue("opentext.webServicesUrl");
     String username = config.getValue("opentext.username");
     String password = context.getSensitiveValueDecoder().decodeValue(
@@ -224,34 +230,36 @@ public class OpentextAdaptor extends AbstractAdaptor {
     log.log(Level.CONFIG, "opentext.username: {0}", username);
     this.username = username;
     this.password = password;
-    String adminUsername = config.getValue("opentext.adminUsername");
-    if (Strings.isNullOrEmpty(adminUsername)) {
-      log.log(Level.CONFIG, "No user with administration rights configured."
-          + " User " + this.username
-          + " will be used to read item permissions.");
-      this.adminUsername = null;
-      this.adminPassword = null;
-    } else {
-      String adminPassword = context.getSensitiveValueDecoder().decodeValue(
-          config.getValue("opentext.adminPassword"));
-      log.log(Level.CONFIG, "opentext.adminUsername: {0}", adminUsername);
-      this.adminUsername = adminUsername;
-      this.adminPassword = adminPassword;
-      Authentication authentication = soapFactory.newAuthentication();
-      try {
-        authentication.authenticateUser(
-            this.adminUsername, this.adminPassword);
-      } catch (SOAPFaultException soapFaultException) {
-        SOAPFault fault = soapFaultException.getFault();
-        String localPart = fault.getFaultCodeAsQName().getLocalPart();
-        if ("Core.LoginFailed".equals(localPart)) {
-          throw new InvalidConfigurationException(
-              localPart
-              + " (opentext.adminUsername: " + this.adminUsername + "): "
-              + fault.getFaultString(),
-              soapFaultException);
+    if (!this.markAllDocsAsPublic) {
+      String adminUsername = config.getValue("opentext.adminUsername");
+      if (Strings.isNullOrEmpty(adminUsername)) {
+        log.log(Level.CONFIG, "No user with administration rights configured."
+            + " User " + this.username
+            + " will be used to read item permissions.");
+        this.adminUsername = null;
+        this.adminPassword = null;
+      } else {
+        String adminPassword = context.getSensitiveValueDecoder().decodeValue(
+            config.getValue("opentext.adminPassword"));
+        log.log(Level.CONFIG, "opentext.adminUsername: {0}", adminUsername);
+        this.adminUsername = adminUsername;
+        this.adminPassword = adminPassword;
+        Authentication authentication = soapFactory.newAuthentication();
+        try {
+          authentication.authenticateUser(
+              this.adminUsername, this.adminPassword);
+        } catch (SOAPFaultException soapFaultException) {
+          SOAPFault fault = soapFaultException.getFault();
+          String localPart = fault.getFaultCodeAsQName().getLocalPart();
+          if ("Core.LoginFailed".equals(localPart)) {
+            throw new InvalidConfigurationException(
+                localPart
+                + " (opentext.adminUsername: " + this.adminUsername + "): "
+                + fault.getFaultString(),
+                soapFaultException);
+          }
+          throw soapFaultException;
         }
-        throw soapFaultException;
       }
     }
     Authentication authentication = soapFactory.newAuthentication();
@@ -275,13 +283,14 @@ public class OpentextAdaptor extends AbstractAdaptor {
       throw soapFaultException;
     }
 
-    String publicAccessGroupEnabled =
-        config.getValue("opentext.publicAccessGroupEnabled");
-    log.log(Level.CONFIG,
-        "opentext.publicAccessGroupEnabled: {0}", publicAccessGroupEnabled);
-    this.publicAccessGroupEnabled =
-        Boolean.parseBoolean(publicAccessGroupEnabled);
-
+    if (!this.markAllDocsAsPublic) {
+      String publicAccessGroupEnabled =
+          config.getValue("opentext.publicAccessGroupEnabled");
+      log.log(Level.CONFIG,
+          "opentext.publicAccessGroupEnabled: {0}", publicAccessGroupEnabled);
+      this.publicAccessGroupEnabled =
+          Boolean.parseBoolean(publicAccessGroupEnabled);
+    }
     String src = config.getValue("opentext.src");
     String separator = config.getValue("opentext.src.separator");
     log.log(Level.CONFIG, "opentext.src: {0}", src);
@@ -349,7 +358,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
     } catch (NumberFormatException numberFormatException) {
       throw new InvalidConfigurationException(
           "opentext.currentVersionType: " + currentVersionType,
-        numberFormatException);
+          numberFormatException);
     }
 
     String indexCategories = config.getValue("opentext.indexCategories");
@@ -415,12 +424,12 @@ public class OpentextAdaptor extends AbstractAdaptor {
     log.log(Level.CONFIG,
         "opentext.metadataDateFormat: {0}", metadataDateFormat);
     this.metadataDateFormatter =
-      new ThreadLocal<SimpleDateFormat>() {
+        new ThreadLocal<SimpleDateFormat>() {
           @Override
           protected SimpleDateFormat initialValue() {
-              return new SimpleDateFormat(metadataDateFormat);
+            return new SimpleDateFormat(metadataDateFormat);
           }
-      };
+        };
   }
 
   @Override
@@ -440,19 +449,21 @@ public class OpentextAdaptor extends AbstractAdaptor {
     log.log(Level.FINER, "Sending doc ids: {0}", docIds);
     pusher.pushDocIds(docIds);
 
-    MemberService memberService =
-        this.soapFactory.newMemberService(documentManagement);
-    Map<GroupPrincipal, List<Principal>> groupDefinitions =
-        getGroups(memberService);
-    if (this.publicAccessGroupEnabled) {
-      List<Principal> publicAccessGroup = getPublicAccessGroup(memberService);
-      if (publicAccessGroup.size() > 0) {
-        groupDefinitions.put(
-            new GroupPrincipal("Public Access"), publicAccessGroup);
+    if (!this.markAllDocsAsPublic) {
+      MemberService memberService =
+          this.soapFactory.newMemberService(documentManagement);
+      Map<GroupPrincipal, List<Principal>> groupDefinitions =
+          getGroups(memberService);
+      if (this.publicAccessGroupEnabled) {
+        List<Principal> publicAccessGroup = getPublicAccessGroup(memberService);
+        if (publicAccessGroup.size() > 0) {
+          groupDefinitions.put(
+              new GroupPrincipal("Public Access"), publicAccessGroup);
+        }
       }
-    }
-    if (groupDefinitions.size() > 0) {
-      pusher.pushGroupDefinitions(groupDefinitions, true);
+      if (groupDefinitions.size() > 0) {
+        pusher.pushGroupDefinitions(groupDefinitions, true);
+      }
     }
   }
 
@@ -584,7 +595,9 @@ public class OpentextAdaptor extends AbstractAdaptor {
     if (node.getType().equals("Folder") && !this.indexFolders) {
       resp.setNoIndex(true);
     }
-    doAcl(documentManagement, opentextDocId, node, resp);
+    if (!markAllDocsAsPublic) {
+      doAcl(documentManagement, opentextDocId, node, resp);
+    }
     doCategories(documentManagement, node, resp);
     doNodeFeatures(node, resp);
     doNodeProperties(documentManagement, node, resp);
