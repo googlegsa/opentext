@@ -721,8 +721,9 @@ public class OpentextAdaptorTest {
     Request request = Proxies.newProxyInstance(Request.class,
         requestMock);
     adaptor.getDocContent(request, response);
-    Acl expected = new Acl.Builder().setPermitUsers(
-        Sets.newHashSet(new UserPrincipal("testuser1"))).build();
+    Acl expected = new Acl.Builder()
+        .setPermitUsers(Sets.newHashSet(new UserPrincipal("testuser1")))
+        .build();
     assertEquals(expected, responseMock.getAcl());
   }
 
