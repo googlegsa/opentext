@@ -71,6 +71,7 @@ import com.opentext.livelink.service.docman.PrimitiveAttribute;
 import com.opentext.livelink.service.docman.SetAttribute;
 import com.opentext.livelink.service.docman.UserAttribute;
 import com.opentext.livelink.service.docman.Version;
+import com.opentext.livelink.service.memberservice.Group;
 import com.opentext.livelink.service.memberservice.Member;
 import com.opentext.livelink.service.memberservice.MemberPrivileges;
 import com.opentext.livelink.service.memberservice.MemberSearchOptions;
@@ -2456,6 +2457,60 @@ public class OpentextAdaptorTest {
   }
 
   @Test
+  public void testAclDisabledUser() throws IOException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    User active = (User) getMember(1, "user1", "User");
+    User disabled = (User) getMember(2, "user2", "User");
+    MemberPrivileges memberPrivileges = disabled.getPrivileges();
+    memberPrivileges.setPublicAccessEnabled(true);
+    memberPrivileges.setLoginEnabled(false);
+    soapFactory.memberServiceMock.addMember(active);
+    soapFactory.memberServiceMock.addMember(disabled);
+    NodeRights nodeRights = new NodeRights();
+    nodeRights.getACLRights().add(getNodeRight(active.getID(), "ACL"));
+    nodeRights.getACLRights().add(getNodeRight(disabled.getID(), "ACL"));
+    NodeMock documentNode = new NodeMock(3000, "DocumentName", "Document");
+    soapFactory.documentManagementMock
+        .setNodeRights(documentNode.getID(), nodeRights);
+
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doAcl(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/DocumentName:3000")),
+        documentNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
+    assertEquals(
+        Sets.newHashSet(new UserPrincipal(active.getName())),
+        responseMock.getAcl().getPermits());
+  }
+
+  @Test
+  public void testAclDeletedUser() throws IOException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    User active = (User) getMember(1, "user1", "User");
+    User deleted = (User) getMember(2, "user2", "User");
+    deleted.setDeleted(true);
+    soapFactory.memberServiceMock.addMember(active);
+    soapFactory.memberServiceMock.addMember(deleted);
+    NodeRights nodeRights = new NodeRights();
+    nodeRights.getACLRights().add(getNodeRight(active.getID(), "ACL"));
+    nodeRights.getACLRights().add(getNodeRight(deleted.getID(), "ACL"));
+    NodeMock documentNode = new NodeMock(3000, "DocumentName", "Document");
+    soapFactory.documentManagementMock
+        .setNodeRights(documentNode.getID(), nodeRights);
+
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doAcl(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/DocumentName:3000")),
+        documentNode,
+        Proxies.newProxyInstance(Response.class, responseMock));
+    assertEquals(
+        Sets.newHashSet(new UserPrincipal(active.getName())),
+        responseMock.getAcl().getPermits());
+  }
+
+  @Test
   public void testGetGroups() throws InterruptedException {
     SoapFactoryMock soapFactory = new SoapFactoryMock();
     for (int i = 0; i < 20; i++) {
@@ -2531,6 +2586,83 @@ public class OpentextAdaptorTest {
   }
 
   @Test
+  public void testGetGroupsDeletedUser() throws InterruptedException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    Member active = getMember(1, "user1", "User");
+    Member deleted = getMember(2, "user2", "User");
+    deleted.setDeleted(true);
+    Member group = getMember(11, "group1", "Group");
+    soapFactory.memberServiceMock.addMember(active);
+    soapFactory.memberServiceMock.addMember(deleted);
+    soapFactory.memberServiceMock.addMember(group);
+    soapFactory.memberServiceMock.addMemberToGroup(group.getID(), active);
+    soapFactory.memberServiceMock.addMemberToGroup(group.getID(), deleted);
+
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    Map<GroupPrincipal, List<Principal>> groupDefinitions =
+        adaptor.getGroups(soapFactory.newMemberService());
+    assertEquals(Lists.newArrayList(new UserPrincipal("user1")),
+        groupDefinitions.get(new GroupPrincipal("group1")));
+  }
+
+  @Test
+  public void testGetGroupsDeletedGroup() throws InterruptedException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    Member active = getMember(1, "user1", "User");
+    Member group = getMember(11, "group1", "Group");
+    group.setDeleted(true);
+    soapFactory.memberServiceMock.addMember(active);
+    soapFactory.memberServiceMock.addMember(group);
+    soapFactory.memberServiceMock.addMemberToGroup(group.getID(), active);
+
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    Map<GroupPrincipal, List<Principal>> groupDefinitions =
+        adaptor.getGroups(soapFactory.newMemberService());
+    assertEquals(null, groupDefinitions.get(new GroupPrincipal("group1")));
+  }
+
+  @Test
+  public void testGetGroupsDeletedMemberGroup() throws InterruptedException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    Member active = getMember(1, "user1", "User");
+    Member memberGroup = getMember(2, "memberGroup", "Group");
+    memberGroup.setDeleted(true);
+    Member group = getMember(11, "group1", "Group");
+    soapFactory.memberServiceMock.addMember(active);
+    soapFactory.memberServiceMock.addMember(memberGroup);
+    soapFactory.memberServiceMock.addMember(group);
+    soapFactory.memberServiceMock.addMemberToGroup(group.getID(), active);
+    soapFactory.memberServiceMock.addMemberToGroup(group.getID(), memberGroup);
+
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    Map<GroupPrincipal, List<Principal>> groupDefinitions =
+        adaptor.getGroups(soapFactory.newMemberService());
+    assertEquals(Lists.newArrayList(new UserPrincipal("user1")),
+        groupDefinitions.get(new GroupPrincipal("group1")));
+  }
+
+  @Test
+  public void testGetGroupsLoginDisabledUser() throws InterruptedException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    Member active = getMember(1, "user1", "User");
+    User disabled = (User) getMember(2, "user2", "User");
+    MemberPrivileges memberPrivileges = disabled.getPrivileges();
+    memberPrivileges.setLoginEnabled(false);
+    Member group = getMember(11, "group1", "Group");
+    soapFactory.memberServiceMock.addMember(active);
+    soapFactory.memberServiceMock.addMember(disabled);
+    soapFactory.memberServiceMock.addMember(group);
+    soapFactory.memberServiceMock.addMemberToGroup(group.getID(), active);
+    soapFactory.memberServiceMock.addMemberToGroup(group.getID(), disabled);
+
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    Map<GroupPrincipal, List<Principal>> groupDefinitions =
+        adaptor.getGroups(soapFactory.newMemberService());
+    assertEquals(Lists.newArrayList(new UserPrincipal("user1")),
+        groupDefinitions.get(new GroupPrincipal("group1")));
+  }
+
+  @Test
   public void testGetPublicAccessGroup() throws InterruptedException {
     SoapFactoryMock soapFactory = new SoapFactoryMock();
     for (int i = 0; i < 20; i++) {
@@ -2539,10 +2671,12 @@ public class OpentextAdaptorTest {
       user.setName("user" + i);
       user.setType("User");
       MemberPrivileges memberPrivileges = new MemberPrivileges();
+      memberPrivileges.setLoginEnabled(true);
       memberPrivileges.setPublicAccessEnabled((i % 2) == 0);
       user.setPrivileges(memberPrivileges);
       soapFactory.memberServiceMock.addMember(user);
     }
+
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
     List<Principal> publicAccessGroup =
         adaptor.getPublicAccessGroup(soapFactory.newMemberService());
@@ -2552,6 +2686,27 @@ public class OpentextAdaptorTest {
             new UserPrincipal("user8"), new UserPrincipal("user10"),
             new UserPrincipal("user12"), new UserPrincipal("user14"),
             new UserPrincipal("user16"), new UserPrincipal("user18")),
+        publicAccessGroup);
+  }
+
+  @Test
+  public void testGetPublicAccessGroupDisabledUser()
+      throws InterruptedException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    User active = (User) getMember(1, "user1", "User");
+    MemberPrivileges memberPrivileges = active.getPrivileges();
+    memberPrivileges.setPublicAccessEnabled(true);
+    User disabled = (User) getMember(2, "user2", "User");
+    memberPrivileges = disabled.getPrivileges();
+    memberPrivileges.setPublicAccessEnabled(true);
+    memberPrivileges.setLoginEnabled(false);
+    soapFactory.memberServiceMock.addMember(active);
+    soapFactory.memberServiceMock.addMember(disabled);
+
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    List<Principal> publicAccessGroup =
+        adaptor.getPublicAccessGroup(soapFactory.newMemberService());
+    assertEquals(Lists.newArrayList(new UserPrincipal("user1")),
         publicAccessGroup);
   }
 
@@ -3365,12 +3520,16 @@ public class OpentextAdaptorTest {
     return nodeRight;
   }
 
-  /* Specifying the member type is required in order for
-   * MemberService.getMemberById to work correctly, even though
-   * in many cases we only need the name, not the type.
-   */
   private Member getMember(long id, String name, String type) {
-    Member member = new Member();
+    Member member;
+    if (type.equals("User")) {
+      MemberPrivileges priv = new MemberPrivileges();
+      priv.setLoginEnabled(true);
+      member = new User();
+      ((User) member).setPrivileges(priv);
+    } else {
+      member = new Group();
+    }
     member.setID(id);
     member.setName(name);
     member.setType(type);

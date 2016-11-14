@@ -498,9 +498,17 @@ public class OpentextAdaptor extends AbstractAdaptor {
       log.log(Level.FINE, "Processing " + groups.size() + " groups");
       for (Member group : groups) {
         log.log(Level.FINER, "Processing group: " + group.getName());
+        if (!isActive(group)) {
+          log.log(Level.FINEST, "Is not active: " + group.getName());
+          continue;
+        }
         List<Member> members = memberService.listMembers(group.getID());
         List<Principal> memberPrincipals = new ArrayList<Principal>();
         for (Member member : members) {
+          if (!isActive(member)) {
+            log.log(Level.FINEST, "Is not active: " + member.getName());
+            continue;
+          }
           if ("User".equals(member.getType())) {
             memberPrincipals.add(new UserPrincipal(member.getName()));
           } else if ("Group".equals(member.getType())) {
@@ -550,6 +558,10 @@ public class OpentextAdaptor extends AbstractAdaptor {
       }
       for (Member user : users) {
         if (!(user instanceof User)) { // Just check before casting.
+          continue;
+        }
+        if (!isActive(user)) {
+          log.log(Level.FINEST, "Is not active: " + user.getName());
           continue;
         }
         MemberPrivileges memberPrivileges = ((User) user).getPrivileges();
@@ -702,6 +714,10 @@ public class OpentextAdaptor extends AbstractAdaptor {
           log.log(Level.FINER, "Member not found: " + nodeRight.getRightID());
           continue;
         }
+        if (!isActive(member)) {
+          log.log(Level.FINEST, "Is not active: " + member.getName());
+          continue;
+        }
         if ("User".equals(member.getType())) {
           permitUsers.add(new UserPrincipal(member.getName()));
         } else if ("Group".equals(member.getType())) {
@@ -762,6 +778,10 @@ public class OpentextAdaptor extends AbstractAdaptor {
       throws SOAPFaultException {
     List<Member> members = memberService.listMembers(id);
     for (Member member : members) {
+      if (!isActive(member)) {
+        log.log(Level.FINEST, "Is not active: " + member.getName());
+        continue;
+      }
       if ("User".equals(member.getType())) {
         users.add(new UserPrincipal(member.getName()));
       } else if ("Group".equals(member.getType())) {
@@ -1883,5 +1903,17 @@ public class OpentextAdaptor extends AbstractAdaptor {
     } catch (NumberFormatException numberFormatException) {
       return nodeType;
     }
+  }
+
+  private static boolean isActive(Member member) {
+    if (member.isDeleted()) {
+      return false;
+    }
+    if ("User".equals(member.getType())) {
+      if (!((User) member).getPrivileges().isLoginEnabled()) {
+        return false;
+      }
+    }
+    return true;
   }
 }
