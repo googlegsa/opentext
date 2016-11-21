@@ -26,6 +26,11 @@ opentext.displayUrl.contentServerUrl = <Content Server URL>
 # with Public Access enabled.
 opentext.publicAccessGroupEnabled = true|false
 
+# When a non-empty value is specified for opentext.windowsDomain, the value
+# is used as domain for all the users and groups with no domain information
+# in the system. Default is empty “”.
+# opentext.windowsDomain =
+
 # List of node types to exclude; no content will be sent for
 # these types. If the type is a container, its contents will not
 # be indexed. If a type is one of the following, you must specify

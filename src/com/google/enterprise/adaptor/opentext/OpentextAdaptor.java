@@ -137,6 +137,9 @@ public class OpentextAdaptor extends AbstractAdaptor {
   private String adminPassword;
   private boolean markAllDocsAsPublic;
   private boolean publicAccessGroupEnabled;
+  private String windowsDomain;
+  private String globalNamespace;
+  private String localNamespace;
   /** Configured start points, with unknown values removed. */
   private List<StartPoint> startPoints;
   private String contentServerUrl;
@@ -181,6 +184,8 @@ public class OpentextAdaptor extends AbstractAdaptor {
     config.addKey("opentext.adminUsername", "");
     config.addKey("opentext.adminPassword", "");
     config.addKey("opentext.publicAccessGroupEnabled", "false");
+    config.addKey("opentext.windowsDomain", "");
+    config.addKey("adaptor.namespace", Principal.DEFAULT_NAMESPACE);
     config.addKey("opentext.src", "EnterpriseWS");
     config.addKey("opentext.src.separator", ",");
     config.addKey("opentext.displayUrl.contentServerUrl", null);
@@ -283,14 +288,6 @@ public class OpentextAdaptor extends AbstractAdaptor {
       throw soapFaultException;
     }
 
-    if (!this.markAllDocsAsPublic) {
-      String publicAccessGroupEnabled =
-          config.getValue("opentext.publicAccessGroupEnabled");
-      log.log(Level.CONFIG,
-          "opentext.publicAccessGroupEnabled: {0}", publicAccessGroupEnabled);
-      this.publicAccessGroupEnabled =
-          Boolean.parseBoolean(publicAccessGroupEnabled);
-    }
     String src = config.getValue("opentext.src");
     String separator = config.getValue("opentext.src.separator");
     log.log(Level.CONFIG, "opentext.src: {0}", src);
@@ -327,6 +324,22 @@ public class OpentextAdaptor extends AbstractAdaptor {
         this.queryStrings);
     log.log(Level.CONFIG, "opentext.displayUrl.objAction: {0}",
         this.objectActions);
+
+    if (!this.markAllDocsAsPublic) {
+      String publicAccessGroupEnabled =
+          config.getValue("opentext.publicAccessGroupEnabled");
+      log.log(Level.CONFIG,
+          "opentext.publicAccessGroupEnabled: {0}", publicAccessGroupEnabled);
+      this.publicAccessGroupEnabled =
+          Boolean.parseBoolean(publicAccessGroupEnabled);
+      this.windowsDomain = config.getValue("opentext.windowsDomain");
+      log.log(Level.CONFIG, "opentext.windowsDomain: {0}", this.windowsDomain);
+      this.globalNamespace = config.getValue("adaptor.namespace");
+      log.log(Level.CONFIG, "adaptor.namespace: {0}", this.globalNamespace);
+      this.localNamespace =
+          getLocalNamespace(this.globalNamespace, this.contentServerUrl);
+      log.log(Level.CONFIG, "local namespace: {0}", this.localNamespace);
+    }
 
     // excludedNodeTypes may override the value for indexFolders,
     // so read this config property first.
@@ -458,7 +471,8 @@ public class OpentextAdaptor extends AbstractAdaptor {
         List<Principal> publicAccessGroup = getPublicAccessGroup(memberService);
         if (publicAccessGroup.size() > 0) {
           groupDefinitions.put(
-              new GroupPrincipal("Public Access"), publicAccessGroup);
+              new GroupPrincipal("[Public Access]", this.localNamespace),
+              publicAccessGroup);
         }
       }
       if (groupDefinitions.size() > 0) {
@@ -510,9 +524,9 @@ public class OpentextAdaptor extends AbstractAdaptor {
             continue;
           }
           if ("User".equals(member.getType())) {
-            memberPrincipals.add(new UserPrincipal(member.getName()));
+            memberPrincipals.add(getUserPrincipal(member));
           } else if ("Group".equals(member.getType())) {
-            memberPrincipals.add(new GroupPrincipal(member.getName()));
+            memberPrincipals.add(getGroupPrincipal(member));
           }
         }
         log.log(Level.FINER,
@@ -520,8 +534,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
         if (memberPrincipals.size() > 0) {
           log.log(Level.FINEST, "Adding group {0}: {1}",
               new Object[] { group.getName(), memberPrincipals });
-          groupDefinitions.put(
-              new GroupPrincipal(group.getName()), memberPrincipals);
+          groupDefinitions.put(getGroupPrincipal(group), memberPrincipals);
         }
       }
       handle = results.getPageHandle();
@@ -566,14 +579,40 @@ public class OpentextAdaptor extends AbstractAdaptor {
         }
         MemberPrivileges memberPrivileges = ((User) user).getPrivileges();
         if (memberPrivileges.isPublicAccessEnabled()) {
-          publicAccessGroup.add(new UserPrincipal(user.getName()));
+          publicAccessGroup.add(getUserPrincipal(user));
         }
       }
       handle = results.getPageHandle();
     }
     log.log(Level.FINER,
-        "Size of Public Access group: " + publicAccessGroup.size());
+        "Size of [Public Access] group: " + publicAccessGroup.size());
     return publicAccessGroup;
+  }
+
+  @VisibleForTesting
+  UserPrincipal getUserPrincipal(Member user) {
+    String name = user.getName();
+    int slash = name.indexOf("\\");
+    if (slash != -1) {
+      return new UserPrincipal(name, this.globalNamespace);
+    }
+    if (Strings.isNullOrEmpty(this.windowsDomain)) {
+      return new UserPrincipal(name, this.localNamespace);
+    } else {
+      return new UserPrincipal(
+          windowsDomain + "\\" + name, this.globalNamespace);
+    }
+  }
+
+  @VisibleForTesting
+  GroupPrincipal getGroupPrincipal(Member group) {
+    String name = group.getName();
+    int slash = name.indexOf("\\");
+    if (slash != -1) {
+      return new GroupPrincipal(name, this.globalNamespace);
+    } else {
+      return new GroupPrincipal(name, this.localNamespace);
+    }
   }
 
   /** Gives the bytes of a document referenced with id. */
@@ -685,7 +724,8 @@ public class OpentextAdaptor extends AbstractAdaptor {
       if (publicRight != null) {
         NodePermissions publicPermissions = publicRight.getPermissions();
         if (publicPermissions.isSeeContentsPermission()) {
-          permitGroups.add(new GroupPrincipal("Public Access"));
+          permitGroups.add(
+              new GroupPrincipal("[Public Access]", this.localNamespace));
         }
       }
     }
@@ -719,9 +759,9 @@ public class OpentextAdaptor extends AbstractAdaptor {
           continue;
         }
         if ("User".equals(member.getType())) {
-          permitUsers.add(new UserPrincipal(member.getName()));
+          permitUsers.add(getUserPrincipal(member));
         } else if ("Group".equals(member.getType())) {
-          permitGroups.add(new GroupPrincipal(member.getName()));
+          permitGroups.add(getGroupPrincipal(member));
         }
       } catch (SOAPFaultException soapFaultException) {
         SOAPFault fault = soapFaultException.getFault();
@@ -783,9 +823,9 @@ public class OpentextAdaptor extends AbstractAdaptor {
         continue;
       }
       if ("User".equals(member.getType())) {
-        users.add(new UserPrincipal(member.getName()));
+        users.add(getUserPrincipal(member));
       } else if ("Group".equals(member.getType())) {
-        groups.add(new GroupPrincipal(member.getName()));
+        groups.add(getGroupPrincipal(member));
       } else if ("ProjectGroup".equals(member.getType())) {
         // ProjectGroups can be references to parent
         // ProjectGroups when, for example, a Project is nested
@@ -1915,5 +1955,20 @@ public class OpentextAdaptor extends AbstractAdaptor {
       }
     }
     return true;
+  }
+
+  @VisibleForTesting
+  static String getLocalNamespace(String globalNamespace, String displayUrl) {
+    URI uri = URI.create(displayUrl);
+    String localNamespace = uri.getHost();
+    if (localNamespace == null) {
+      throw new InvalidConfigurationException(displayUrl);
+    }
+    localNamespace = localNamespace.replace('.', '-');
+    int port = uri.getPort();
+    if (port != -1) {
+      localNamespace += "_" + port;
+    }
+    return globalNamespace + "_" + localNamespace;
   }
 }

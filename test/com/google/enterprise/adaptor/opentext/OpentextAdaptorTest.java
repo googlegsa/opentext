@@ -117,6 +117,12 @@ import javax.xml.ws.soap.SOAPFaultException;
  * Tests the OpentextAdaptor class.
  */
 public class OpentextAdaptorTest {
+  /** The namespaces when this test's initConfig helper is used. */
+  private static final String GLOBAL_NAMESPACE = "globalnamespace";
+  private static final String LOCAL_NAMESPACE =
+      GLOBAL_NAMESPACE + "_example-com";
+
+
   @BeforeClass
   public static void setUpClass() {
     // Tests trigger warning logs in the adaptor; remove those
@@ -385,6 +391,22 @@ public class OpentextAdaptorTest {
   }
 
   @Test
+  public void testGetLocalNamespace() {
+    assertEquals("Default_www-example-com",
+        OpentextAdaptor.getLocalNamespace(
+            "Default", "https://www.example.com/CS/cs.exe"));
+    assertEquals("Default_www-example-com_42",
+        OpentextAdaptor.getLocalNamespace(
+            "Default", "https://www.example.com:42/CS/cs.exe"));
+    assertEquals("Default_www-2-example-com_42",
+        OpentextAdaptor.getLocalNamespace(
+            "Default", "https://www-2.example.com:42/CS/cs.exe"));
+    assertEquals("Default_1-1-1-1_42",
+        OpentextAdaptor.getLocalNamespace(
+            "Default", "https://1.1.1.1:42/CS/cs.exe"));
+  }
+
+  @Test
   public void testDefaultGetDocIds() throws InterruptedException {
     SoapFactoryMock soapFactory = new SoapFactoryMock();
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
@@ -460,8 +482,8 @@ public class OpentextAdaptorTest {
         Proxies.newProxyInstance(DocIdPusher.class, docIdPusherMock));
     Map<GroupPrincipal, List<Principal>> expected =
         new HashMap<GroupPrincipal, List<Principal>>();
-    expected.put(new GroupPrincipal("group1"),
-        Lists.newArrayList(new UserPrincipal("user1")));
+    expected.put(newGroupPrincipal("group1"),
+        Lists.newArrayList(newUserPrincipal("user1")));
     assertEquals(expected, docIdPusherMock.groupDefinitions);
   }
 
@@ -723,7 +745,7 @@ public class OpentextAdaptorTest {
         requestMock);
     adaptor.getDocContent(request, response);
     Acl expected = new Acl.Builder()
-        .setPermitUsers(Sets.newHashSet(new UserPrincipal("testuser1")))
+        .setPermitUsers(Sets.newHashSet(newUserPrincipal("testuser1")))
         .build();
     assertEquals(expected, responseMock.getAcl());
   }
@@ -2159,13 +2181,16 @@ public class OpentextAdaptorTest {
         .setNodeRights(documentNode.getID(), nodeRights);
     soapFactory.memberServiceMock.addMember(owner);
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
     ResponseMock responseMock = new ResponseMock();
     adaptor.doAcl(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/DocumentName:3000")),
         documentNode,
         Proxies.newProxyInstance(Response.class, responseMock));
     assertEquals(
-        Sets.newHashSet(new UserPrincipal(owner.getName())),
+        Sets.newHashSet(newUserPrincipal(owner.getName())),
         responseMock.getAcl().getPermits());
   }
 
@@ -2181,13 +2206,16 @@ public class OpentextAdaptorTest {
         .setNodeRights(documentNode.getID(), nodeRights);
     soapFactory.memberServiceMock.addMember(ownerGroup);
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
     ResponseMock responseMock = new ResponseMock();
     adaptor.doAcl(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/DocumentName:3000")),
         documentNode,
         Proxies.newProxyInstance(Response.class, responseMock));
     assertEquals(
-        Sets.newHashSet(new GroupPrincipal(ownerGroup.getName())),
+        Sets.newHashSet(newGroupPrincipal(ownerGroup.getName())),
         responseMock.getAcl().getPermits());
   }
 
@@ -2210,7 +2238,7 @@ public class OpentextAdaptorTest {
         documentNode,
         Proxies.newProxyInstance(Response.class, responseMock));
     assertEquals(
-        Sets.newHashSet(new GroupPrincipal("Public Access")),
+        Sets.newHashSet(newGroupPrincipal("[Public Access]")),
         responseMock.getAcl().getPermits());
   }
 
@@ -2249,13 +2277,16 @@ public class OpentextAdaptorTest {
         .setNodeRights(documentNode.getID(), nodeRights);
     soapFactory.memberServiceMock.addMember(aclUser);
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
     ResponseMock responseMock = new ResponseMock();
     adaptor.doAcl(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/DocumentName:3000")),
         documentNode,
         Proxies.newProxyInstance(Response.class, responseMock));
     assertEquals(
-        Sets.newHashSet(new UserPrincipal(aclUser.getName())),
+        Sets.newHashSet(newUserPrincipal(aclUser.getName())),
         responseMock.getAcl().getPermits());
   }
 
@@ -2308,15 +2339,18 @@ public class OpentextAdaptorTest {
     soapFactory.documentManagementMock
         .setNodeRights(documentNode.getID(), nodeRights);
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
     ResponseMock responseMock = new ResponseMock();
     adaptor.doAcl(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/DocumentName:3000")),
         documentNode,
         Proxies.newProxyInstance(Response.class, responseMock));
     assertEquals(
-        Sets.newHashSet(new UserPrincipal(owner.getName()),
-            new UserPrincipal(guestUser.getName()),
-            new GroupPrincipal(ownerGroup.getName())),
+        Sets.newHashSet(newUserPrincipal(owner.getName()),
+            newUserPrincipal(guestUser.getName()),
+            newGroupPrincipal(ownerGroup.getName())),
         responseMock.getAcl().getPermits());;
   }
 
@@ -2474,13 +2508,16 @@ public class OpentextAdaptorTest {
         .setNodeRights(documentNode.getID(), nodeRights);
 
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
     ResponseMock responseMock = new ResponseMock();
     adaptor.doAcl(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/DocumentName:3000")),
         documentNode,
         Proxies.newProxyInstance(Response.class, responseMock));
     assertEquals(
-        Sets.newHashSet(new UserPrincipal(active.getName())),
+        Sets.newHashSet(newUserPrincipal(active.getName())),
         responseMock.getAcl().getPermits());
   }
 
@@ -2500,13 +2537,16 @@ public class OpentextAdaptorTest {
         .setNodeRights(documentNode.getID(), nodeRights);
 
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
     ResponseMock responseMock = new ResponseMock();
     adaptor.doAcl(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/DocumentName:3000")),
         documentNode,
         Proxies.newProxyInstance(Response.class, responseMock));
     assertEquals(
-        Sets.newHashSet(new UserPrincipal(active.getName())),
+        Sets.newHashSet(newUserPrincipal(active.getName())),
         responseMock.getAcl().getPermits());
   }
 
@@ -2527,29 +2567,32 @@ public class OpentextAdaptorTest {
       }
     }
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
     Map<GroupPrincipal, List<Principal>> groupDefinitions =
         adaptor.getGroups(soapFactory.newMemberService());
     assertEquals(4, groupDefinitions.size());
     assertEquals(Lists.newArrayList(
-            new UserPrincipal("user0"), new UserPrincipal("user1"),
-            new UserPrincipal("user2"), new UserPrincipal("user3"),
-            new UserPrincipal("user4")),
-        groupDefinitions.get(new GroupPrincipal("group0")));
+            newUserPrincipal("user0"), newUserPrincipal("user1"),
+            newUserPrincipal("user2"), newUserPrincipal("user3"),
+            newUserPrincipal("user4")),
+        groupDefinitions.get(newGroupPrincipal("group0")));
     assertEquals(Lists.newArrayList(
-            new UserPrincipal("user5"), new UserPrincipal("user6"),
-            new UserPrincipal("user7"), new UserPrincipal("user8"),
-            new UserPrincipal("user9")),
-        groupDefinitions.get(new GroupPrincipal("group1")));
+            newUserPrincipal("user5"), newUserPrincipal("user6"),
+            newUserPrincipal("user7"), newUserPrincipal("user8"),
+            newUserPrincipal("user9")),
+        groupDefinitions.get(newGroupPrincipal("group1")));
     assertEquals(Lists.newArrayList(
-            new UserPrincipal("user10"), new UserPrincipal("user11"),
-            new UserPrincipal("user12"), new UserPrincipal("user13"),
-            new UserPrincipal("user14")),
-        groupDefinitions.get(new GroupPrincipal("group2")));
+            newUserPrincipal("user10"), newUserPrincipal("user11"),
+            newUserPrincipal("user12"), newUserPrincipal("user13"),
+            newUserPrincipal("user14")),
+        groupDefinitions.get(newGroupPrincipal("group2")));
     assertEquals(Lists.newArrayList(
-            new UserPrincipal("user15"), new UserPrincipal("user16"),
-            new UserPrincipal("user17"), new UserPrincipal("user18"),
-            new UserPrincipal("user19")),
-        groupDefinitions.get(new GroupPrincipal("group3")));
+            newUserPrincipal("user15"), newUserPrincipal("user16"),
+            newUserPrincipal("user17"), newUserPrincipal("user18"),
+            newUserPrincipal("user19")),
+        groupDefinitions.get(newGroupPrincipal("group3")));
   }
 
   @Test
@@ -2573,16 +2616,19 @@ public class OpentextAdaptorTest {
     soapFactory.memberServiceMock.addMemberToGroup(
         2001, soapFactory.memberServiceMock.getMemberById(1010));
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
     Map<GroupPrincipal, List<Principal>> groupDefinitions =
         adaptor.getGroups(soapFactory.newMemberService());
     assertEquals(2, groupDefinitions.size());
     assertEquals(Lists.newArrayList(
-            new UserPrincipal("user0"), new UserPrincipal("user1"),
-            new UserPrincipal("user2")),
-        groupDefinitions.get(new GroupPrincipal("group0")));
+            newUserPrincipal("user0"), newUserPrincipal("user1"),
+            newUserPrincipal("user2")),
+        groupDefinitions.get(newGroupPrincipal("group0")));
     assertEquals(Lists.newArrayList(
-            new GroupPrincipal("group0"), new UserPrincipal("user10")),
-        groupDefinitions.get(new GroupPrincipal("group1")));
+            newGroupPrincipal("group0"), newUserPrincipal("user10")),
+        groupDefinitions.get(newGroupPrincipal("group1")));
   }
 
   @Test
@@ -2599,10 +2645,13 @@ public class OpentextAdaptorTest {
     soapFactory.memberServiceMock.addMemberToGroup(group.getID(), deleted);
 
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
     Map<GroupPrincipal, List<Principal>> groupDefinitions =
         adaptor.getGroups(soapFactory.newMemberService());
-    assertEquals(Lists.newArrayList(new UserPrincipal("user1")),
-        groupDefinitions.get(new GroupPrincipal("group1")));
+    assertEquals(Lists.newArrayList(newUserPrincipal("user1")),
+        groupDefinitions.get(newGroupPrincipal("group1")));
   }
 
   @Test
@@ -2616,9 +2665,12 @@ public class OpentextAdaptorTest {
     soapFactory.memberServiceMock.addMemberToGroup(group.getID(), active);
 
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
     Map<GroupPrincipal, List<Principal>> groupDefinitions =
         adaptor.getGroups(soapFactory.newMemberService());
-    assertEquals(null, groupDefinitions.get(new GroupPrincipal("group1")));
+    assertEquals(null, groupDefinitions.get(newGroupPrincipal("group1")));
   }
 
   @Test
@@ -2635,10 +2687,13 @@ public class OpentextAdaptorTest {
     soapFactory.memberServiceMock.addMemberToGroup(group.getID(), memberGroup);
 
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
     Map<GroupPrincipal, List<Principal>> groupDefinitions =
         adaptor.getGroups(soapFactory.newMemberService());
-    assertEquals(Lists.newArrayList(new UserPrincipal("user1")),
-        groupDefinitions.get(new GroupPrincipal("group1")));
+    assertEquals(Lists.newArrayList(newUserPrincipal("user1")),
+        groupDefinitions.get(newGroupPrincipal("group1")));
   }
 
   @Test
@@ -2656,10 +2711,13 @@ public class OpentextAdaptorTest {
     soapFactory.memberServiceMock.addMemberToGroup(group.getID(), disabled);
 
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
     Map<GroupPrincipal, List<Principal>> groupDefinitions =
         adaptor.getGroups(soapFactory.newMemberService());
-    assertEquals(Lists.newArrayList(new UserPrincipal("user1")),
-        groupDefinitions.get(new GroupPrincipal("group1")));
+    assertEquals(Lists.newArrayList(newUserPrincipal("user1")),
+        groupDefinitions.get(newGroupPrincipal("group1")));
   }
 
   @Test
@@ -2678,14 +2736,17 @@ public class OpentextAdaptorTest {
     }
 
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
     List<Principal> publicAccessGroup =
         adaptor.getPublicAccessGroup(soapFactory.newMemberService());
     assertEquals(Lists.newArrayList(
-            new UserPrincipal("user0"), new UserPrincipal("user2"),
-            new UserPrincipal("user4"), new UserPrincipal("user6"),
-            new UserPrincipal("user8"), new UserPrincipal("user10"),
-            new UserPrincipal("user12"), new UserPrincipal("user14"),
-            new UserPrincipal("user16"), new UserPrincipal("user18")),
+            newUserPrincipal("user0"), newUserPrincipal("user2"),
+            newUserPrincipal("user4"), newUserPrincipal("user6"),
+            newUserPrincipal("user8"), newUserPrincipal("user10"),
+            newUserPrincipal("user12"), newUserPrincipal("user14"),
+            newUserPrincipal("user16"), newUserPrincipal("user18")),
         publicAccessGroup);
   }
 
@@ -2704,10 +2765,114 @@ public class OpentextAdaptorTest {
     soapFactory.memberServiceMock.addMember(disabled);
 
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
     List<Principal> publicAccessGroup =
         adaptor.getPublicAccessGroup(soapFactory.newMemberService());
-    assertEquals(Lists.newArrayList(new UserPrincipal("user1")),
+    assertEquals(Lists.newArrayList(newUserPrincipal("user1")),
         publicAccessGroup);
+  }
+
+  @Test
+  public void testGetUserPrincipal() throws InterruptedException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    Member testMember = new Member();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+
+    // unqualified username, no windowsDomain
+    testMember.setName("user1");
+    assertEquals(new UserPrincipal("user1", LOCAL_NAMESPACE),
+        adaptor.getUserPrincipal(testMember));
+
+    // qualified username, no windowsDomain
+    testMember.setName("windowsDomain\\user1");
+    assertEquals(
+        new UserPrincipal("windowsDomain\\user1", GLOBAL_NAMESPACE),
+        adaptor.getUserPrincipal(testMember));
+
+    adaptor = new OpentextAdaptor(soapFactory);
+    context = ProxyAdaptorContext.getInstance();
+    config = initConfig(adaptor, context);
+    config.overrideKey("opentext.windowsDomain", "testDomain");
+    adaptor.init(context);
+
+    // unqualified username, windowsDomain
+    testMember.setName("user1");
+    assertEquals(
+        new UserPrincipal("testDomain\\user1", GLOBAL_NAMESPACE),
+        adaptor.getUserPrincipal(testMember));
+
+    // qualified username, windowsDomain
+    testMember.setName("windowsDomain\\user1");
+    assertEquals(
+        new UserPrincipal("windowsDomain\\user1", GLOBAL_NAMESPACE),
+        adaptor.getUserPrincipal(testMember));
+  }
+
+  @Test
+  public void testGetGroupPrincipal() throws InterruptedException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    Member testMember = new Member();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+
+    // unqualified name
+    testMember.setName("group1");
+    assertEquals(new GroupPrincipal("group1", LOCAL_NAMESPACE),
+        adaptor.getGroupPrincipal(testMember));
+
+    // qualified name
+    testMember.setName("windowsDomain\\group1");
+    assertEquals(
+        new GroupPrincipal("windowsDomain\\group1", GLOBAL_NAMESPACE),
+        adaptor.getGroupPrincipal(testMember));
+  }
+
+  /**
+   * Check that getGroups calls the user/group principal creation
+   * helpers appropriately.
+   */
+  @Test
+  public void testGetGroupsWindowsDomain() throws InterruptedException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.memberServiceMock.addMember(
+        getMember(1001, "user1", "User"));
+    soapFactory.memberServiceMock.addMember(
+        getMember(1002, "user2", "User"));
+    soapFactory.memberServiceMock.addMember(
+        getMember(1003, "otherDomain\\user3", "User"));
+    soapFactory.memberServiceMock.addMember(
+        getMember(2001, "group1", "Group"));
+    soapFactory.memberServiceMock.addMember(
+        getMember(2002, "group2", "Group"));
+    soapFactory.memberServiceMock.addMemberToGroup(
+        2001, soapFactory.memberServiceMock.getMemberById(1001));
+    soapFactory.memberServiceMock.addMemberToGroup(
+        2001, soapFactory.memberServiceMock.getMemberById(1002));
+    soapFactory.memberServiceMock.addMemberToGroup(
+        2001, soapFactory.memberServiceMock.getMemberById(1003));
+    soapFactory.memberServiceMock.addMemberToGroup(
+        2001, soapFactory.memberServiceMock.getMemberById(2002));
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.windowsDomain", "testDomain");
+    adaptor.init(context);
+    Map<GroupPrincipal, List<Principal>> groupDefinitions =
+        adaptor.getGroups(soapFactory.newMemberService());
+    assertEquals(
+        Lists.newArrayList(
+            new UserPrincipal("testDomain\\user1", GLOBAL_NAMESPACE),
+            new UserPrincipal("testDomain\\user2", GLOBAL_NAMESPACE),
+            new UserPrincipal("otherDomain\\user3", GLOBAL_NAMESPACE),
+            newGroupPrincipal("group2")),
+        groupDefinitions.get(newGroupPrincipal("group1")));
   }
 
   private class SoapFactoryMock implements SoapFactory {
@@ -3495,6 +3660,7 @@ public class OpentextAdaptorTest {
         "http://example.com/les-services/services");
     config.overrideKey("opentext.displayUrl.contentServerUrl",
         "http://example.com/otcs/livelink.exe");
+    config.overrideKey("adaptor.namespace", GLOBAL_NAMESPACE);
     return config;
   }
 
@@ -3534,5 +3700,13 @@ public class OpentextAdaptorTest {
     member.setName(name);
     member.setType(type);
     return member;
+  }
+
+  private UserPrincipal newUserPrincipal(String name) {
+    return new UserPrincipal(name, LOCAL_NAMESPACE);
+  }
+
+  private GroupPrincipal newGroupPrincipal(String name) {
+    return new GroupPrincipal(name, LOCAL_NAMESPACE);
   }
 }
