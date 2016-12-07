@@ -167,6 +167,11 @@ public class OpentextAdaptor extends AbstractAdaptor {
   private Map<String, List<String>> includedNodeFeatures;
   private ThreadLocal<SimpleDateFormat> metadataDateFormatter;
 
+  /** Possible CWS installation server types. */
+  public enum CwsServer {
+    IIS, TOMCAT
+  }
+
   public OpentextAdaptor() {
     this(new SoapFactoryImpl());
   }
@@ -179,6 +184,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
   @Override
   public void initConfig(Config config) {
     config.addKey("opentext.webServicesUrl", null);
+    config.addKey("opentext.webServicesServer", "");
     config.addKey("opentext.username", null);
     config.addKey("opentext.password", null);
     config.addKey("opentext.adminUsername", "");
@@ -232,41 +238,12 @@ public class OpentextAdaptor extends AbstractAdaptor {
     String password = context.getSensitiveValueDecoder().decodeValue(
         config.getValue("opentext.password"));
     log.log(Level.CONFIG, "opentext.webServicesUrl: {0}", webServicesUrl);
+    log.log(Level.CONFIG, "opentext.webServicesServer: {0}",
+        config.getValue("opentext.webServicesServer"));
     log.log(Level.CONFIG, "opentext.username: {0}", username);
     this.username = username;
     this.password = password;
-    if (!this.markAllDocsAsPublic) {
-      String adminUsername = config.getValue("opentext.adminUsername");
-      if (Strings.isNullOrEmpty(adminUsername)) {
-        log.log(Level.CONFIG, "No user with administration rights configured."
-            + " User " + this.username
-            + " will be used to read item permissions.");
-        this.adminUsername = null;
-        this.adminPassword = null;
-      } else {
-        String adminPassword = context.getSensitiveValueDecoder().decodeValue(
-            config.getValue("opentext.adminPassword"));
-        log.log(Level.CONFIG, "opentext.adminUsername: {0}", adminUsername);
-        this.adminUsername = adminUsername;
-        this.adminPassword = adminPassword;
-        Authentication authentication = soapFactory.newAuthentication();
-        try {
-          authentication.authenticateUser(
-              this.adminUsername, this.adminPassword);
-        } catch (SOAPFaultException soapFaultException) {
-          SOAPFault fault = soapFaultException.getFault();
-          String localPart = fault.getFaultCodeAsQName().getLocalPart();
-          if ("Core.LoginFailed".equals(localPart)) {
-            throw new InvalidConfigurationException(
-                localPart
-                + " (opentext.adminUsername: " + this.adminUsername + "): "
-                + fault.getFaultString(),
-                soapFaultException);
-          }
-          throw soapFaultException;
-        }
-      }
-    }
+
     Authentication authentication = soapFactory.newAuthentication();
     String authenticationToken;
     try {
@@ -286,6 +263,65 @@ public class OpentextAdaptor extends AbstractAdaptor {
       // unavailable. We want to allow the adaptor to retry if
       // that's the error.
       throw soapFaultException;
+    } catch (Exception e) {
+      // If a specific Content Web Services server type was
+      // configured, don't try the other version, just fail.
+      if (!config.getValue("opentext.webServicesServer").isEmpty()) {
+        throw e;
+      }
+      // When no server type is configured, the IIS web services
+      // URL is tried first. If an exception is thrown, try the
+      // Tomcat web services URL format.
+      log.log(Level.CONFIG,
+          "Trying Tomcat web services URL after initial error", e);
+      soapFactory.setServer(CwsServer.TOMCAT);
+      authentication = soapFactory.newAuthentication();
+      try {
+        authenticationToken =
+            authentication.authenticateUser(username, password);
+      } catch (SOAPFaultException soapFaultException) {
+        SOAPFault fault = soapFaultException.getFault();
+        String localPart = fault.getFaultCodeAsQName().getLocalPart();
+        if ("Core.LoginFailed".equals(localPart)) {
+          throw new InvalidConfigurationException(
+              localPart + " (opentext.username: " + username + "): "
+              + fault.getFaultString(),
+              soapFaultException);
+        }
+        throw soapFaultException;
+      }
+    }
+
+    if (!this.markAllDocsAsPublic) {
+      String adminUsername = config.getValue("opentext.adminUsername");
+      if (Strings.isNullOrEmpty(adminUsername)) {
+        log.log(Level.CONFIG, "No user with administration rights configured."
+            + " User " + this.username
+            + " will be used to read item permissions.");
+        this.adminUsername = null;
+        this.adminPassword = null;
+      } else {
+        String adminPassword = context.getSensitiveValueDecoder().decodeValue(
+            config.getValue("opentext.adminPassword"));
+        log.log(Level.CONFIG, "opentext.adminUsername: {0}", adminUsername);
+        this.adminUsername = adminUsername;
+        this.adminPassword = adminPassword;
+        try {
+          soapFactory.newAuthentication().authenticateUser(
+              this.adminUsername, this.adminPassword);
+        } catch (SOAPFaultException soapFaultException) {
+          SOAPFault fault = soapFaultException.getFault();
+          String localPart = fault.getFaultCodeAsQName().getLocalPart();
+          if ("Core.LoginFailed".equals(localPart)) {
+            throw new InvalidConfigurationException(
+                localPart
+                + " (opentext.adminUsername: " + this.adminUsername + "): "
+                + fault.getFaultString(),
+                soapFaultException);
+          }
+          throw soapFaultException;
+        }
+      }
     }
 
     String src = config.getValue("opentext.src");
@@ -1709,6 +1745,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
     MemberService newMemberService(DocumentManagement documentManagement);
     Collaboration newCollaboration(DocumentManagement documentManagement);
     void configure(Config config);
+    void setServer(CwsServer type);
   }
 
   @VisibleForTesting
@@ -1719,6 +1756,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
     private final MemberService_Service memberServiceService;
     private final Collaboration_Service collaborationService;
     private String webServicesUrl;
+    private boolean iis;
 
     SoapFactoryImpl() {
       this.authenticationService = new Authentication_Service(
@@ -1741,7 +1779,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
       if (!this.webServicesUrl.endsWith("/")) {
         this.webServicesUrl += "/";
       }
-      return this.webServicesUrl + serviceName;
+      return this.webServicesUrl + serviceName + (iis ? ".svc" : "");
     }
 
     @Override
@@ -1842,8 +1880,19 @@ public class OpentextAdaptor extends AbstractAdaptor {
     @Override
     public void configure(Config config) {
       this.webServicesUrl = config.getValue("opentext.webServicesUrl");
+      String server = config.getValue("opentext.webServicesServer");
+      if (server.isEmpty()) {
+        this.iis = true;
+      } else {
+        this.iis = CwsServer.IIS.name().equalsIgnoreCase(server);
+      }
     }
- }
+
+    @Override
+    public void setServer(CwsServer server) {
+      this.iis = (CwsServer.IIS == server);
+    }
+  }
 
   @VisibleForTesting
   List<StartPoint> getStartPoints() {

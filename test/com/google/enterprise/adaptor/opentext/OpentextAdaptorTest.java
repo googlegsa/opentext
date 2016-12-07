@@ -137,13 +137,42 @@ public class OpentextAdaptorTest {
    * Verify that the ENDPOINT_ADDRESS_PROPERTY is set.
    */
   @Test
-  public void testSoapFactoryImpl() {
+  public void testSoapFactoryImplServerTomcat() {
     Config config = new Config();
     config.addKey("opentext.webServicesUrl", "webServicesUrl/");
+    config.addKey("opentext.webServicesServer", "Tomcat");
     SoapFactoryImpl factory = new SoapFactoryImpl();
     factory.configure(config);
     Authentication authentication = factory.newAuthentication();
     assertEquals("webServicesUrl/Authentication",
+        ((BindingProvider) authentication).getRequestContext().get(
+            BindingProvider.ENDPOINT_ADDRESS_PROPERTY));
+  }
+
+  @Test
+  public void testSoapFactoryImplServerUnset() {
+    SoapFactoryImpl soapFactory = new SoapFactoryImpl();
+    Config config = new Config();
+    config.addKey("opentext.webServicesUrl", "webServicesUrl");
+    config.addKey("opentext.webServicesServer", "");
+
+    soapFactory.configure(config);
+    Authentication authentication = soapFactory.newAuthentication();
+    assertEquals("webServicesUrl/Authentication.svc",
+        ((BindingProvider) authentication).getRequestContext().get(
+            BindingProvider.ENDPOINT_ADDRESS_PROPERTY));
+  }
+
+  @Test
+  public void testSoapFactoryImplServerIis() {
+    SoapFactoryImpl soapFactory = new SoapFactoryImpl();
+    Config config = new Config();
+    config.addKey("opentext.webServicesUrl", "webServicesUrl");
+    config.addKey("opentext.webServicesServer", "IIS");
+
+    soapFactory.configure(config);
+    Authentication authentication = soapFactory.newAuthentication();
+    assertEquals("webServicesUrl/Authentication.svc",
         ((BindingProvider) authentication).getRequestContext().get(
             BindingProvider.ENDPOINT_ADDRESS_PROPERTY));
   }
@@ -156,6 +185,7 @@ public class OpentextAdaptorTest {
   public void testSoapFactoryImplGetWebServiceAddress() {
     Config config = new Config();
     config.addKey("opentext.webServicesUrl", "webServicesUrl");
+    config.addKey("opentext.webServicesServer", "Tomcat");
     SoapFactoryImpl factory = new SoapFactoryImpl();
     factory.configure(config);
     assertEquals("webServicesUrl/Authentication",
@@ -192,13 +222,9 @@ public class OpentextAdaptorTest {
     assertFalse("authUser called before init",
         soapFactory.authenticationMock.authenticateUserCalled);
     AdaptorContext context = ProxyAdaptorContext.getInstance();
-    Config config = context.getConfig();
-    config.addKey("opentext.username", "invaliduser");
-    config.addKey("opentext.password", "validpassword");
-    config.addKey("opentext.adminUsername", "");
-    config.addKey("opentext.adminPassword", "");
-    config.addKey("opentext.webServicesUrl",
-        "http://example.com/les-services/services");
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.username", "invaliduser");
+    config.overrideKey("opentext.password", "validpassword");
     adaptor.init(context);
   }
 
@@ -212,13 +238,9 @@ public class OpentextAdaptorTest {
     assertFalse("authUser called before init",
         soapFactory.authenticationMock.authenticateUserCalled);
     AdaptorContext context = ProxyAdaptorContext.getInstance();
-    Config config = context.getConfig();
-    config.addKey("opentext.username", "validuser");
-    config.addKey("opentext.password", "invalidpassword");
-    config.addKey("opentext.adminUsername", "");
-    config.addKey("opentext.adminPassword", "");
-    config.addKey("opentext.webServicesUrl",
-        "http://example.com/les-services/services");
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.username", "validuser");
+    config.overrideKey("opentext.password", "invalidpassword");
     adaptor.init(context);
   }
 
@@ -232,13 +254,9 @@ public class OpentextAdaptorTest {
     assertFalse("authUser called before init",
         soapFactory.authenticationMock.authenticateUserCalled);
     AdaptorContext context = ProxyAdaptorContext.getInstance();
-    Config config = context.getConfig();
-    config.addKey("opentext.username", "validuser");
-    config.addKey("opentext.password", "other");
-    config.addKey("opentext.adminUsername", "");
-    config.addKey("opentext.adminPassword", "");
-    config.addKey("opentext.webServicesUrl",
-        "http://example.com/les-services/services");
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.username", "validuser");
+    config.overrideKey("opentext.password", "other");
     adaptor.init(context);
   }
 
@@ -252,13 +270,9 @@ public class OpentextAdaptorTest {
     assertFalse("authUser called before init",
         soapFactory.authenticationMock.authenticateUserCalled);
     AdaptorContext context = ProxyAdaptorContext.getInstance();
-    Config config = context.getConfig();
-    config.addKey("opentext.username", "validuser");
-    config.addKey("opentext.password", "validpassword");
-    config.addKey("opentext.adminUsername", "invaliduser");
-    config.addKey("opentext.adminPassword", "validpassword");
-    config.addKey("opentext.webServicesUrl",
-        "http://example.com/les-services/services");
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.adminUsername", "invaliduser");
+    config.overrideKey("opentext.adminPassword", "validpassword");
     adaptor.init(context);
   }
 
@@ -283,12 +297,7 @@ public class OpentextAdaptorTest {
     SoapFactoryMock soapFactory = new SoapFactoryMock();
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
     AdaptorContext context = ProxyAdaptorContext.getInstance();
-    Config config = context.getConfig();
-    adaptor.initConfig(config);
-    config.overrideKey("opentext.username", "validuser");
-    config.overrideKey("opentext.password", "validpassword");
-    config.overrideKey("opentext.webServicesUrl",
-        "http://example.com/les-services/services");
+    Config config = initConfig(adaptor, context);
     config.overrideKey("opentext.src", "");
     adaptor.init(context);
   }
@@ -2937,6 +2946,10 @@ public class OpentextAdaptorTest {
 
     @Override
     public void configure(Config config) {
+    }
+
+    @Override
+    public void setServer(OpentextAdaptor.CwsServer server) {
     }
   }
 

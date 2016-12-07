@@ -2,8 +2,18 @@
 gsa.hostname = <GSA hostname>
 
 # Content Web Services config
-# webServicesUrl should be in the form http://<host>[:<port>]/les-services/services
+# IIS webServicesUrl example: http://<host>[:<port>]/cws
+# Tomcat webServicesUrl example: http://<host>[:<port>]/cws/services
 opentext.webServicesUrl = <Base URL for Content Web Services>
+
+# Content Web Services service URLs have different formats depending on
+# the type of server where CWS is installed. When this property
+# is left unset, the adaptor will try the IIS format and fall
+# back to the Tomcat format if the first attempt fails, allowing
+# it to support either installation with no configuration. To
+# specify the installation type explicitly, set this property.
+# opentext.webServicesServer = IIS | Tomcat
+
 opentext.username = <Content Server username>
 opentext.password = <Password for Content Server user>
 
