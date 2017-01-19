@@ -154,6 +154,9 @@ public class OpentextAdaptor extends AbstractAdaptor {
   private List<String> includedCategories;
   private List<String> excludedCategories;
 
+  // Cache the definition for OTEmailProperties
+  private SortedMap<String, Attribute> emailAttributeDefinitions =
+      Collections.synchronizedSortedMap(new TreeMap<String, Attribute>());
   // Look up attributes by key
   private SortedMap<String, Attribute> attributeDefinitions =
       Collections.synchronizedSortedMap(new TreeMap<String, Attribute>());
@@ -699,6 +702,9 @@ public class OpentextAdaptor extends AbstractAdaptor {
         // fall through
       case "Document":
         doDocument(documentManagement, opentextDocId, node, req, resp);
+        break;
+      case "Email":
+        doEmail(documentManagement, opentextDocId, node, req, resp);
         break;
       case "Milestone":
         doMilestone(documentManagement, opentextDocId, node, resp);
@@ -1316,6 +1322,74 @@ public class OpentextAdaptor extends AbstractAdaptor {
     writeHtmlResponse(response, node, node.getName());
   }
 
+  /*
+   * Return email content. Extract the email data available as
+   * metadata, then send the email message file in the same way
+   * as a document. Email objects can also have Category metadata;
+   * only send email-specific attributes here.
+   */
+  @VisibleForTesting
+  void doEmail(DocumentManagement documentManagement,
+      OpentextDocId opentextDocId, Node node,
+      Request request, Response response) throws IOException {
+    Metadata metadata = node.getMetadata();
+    if (metadata != null) {
+      List<AttributeGroup> attributeGroups = metadata.getAttributeGroups();
+      if (attributeGroups != null) {
+        for (AttributeGroup attributeGroup : attributeGroups) {
+          if (!"OTEmailProperties".equals(attributeGroup.getType())) {
+            continue;
+          }
+          cacheEmailMetadataDefinition(documentManagement, attributeGroup);
+          doAttributeGroup(
+              response, null, attributeGroup, this.emailAttributeDefinitions);
+        }
+      }
+    }
+    doDocument(documentManagement, opentextDocId, node, request, response);
+  }
+
+  /* Email metadata uses the same data structures as Category
+   * metadata. However, there are observed differences in the
+   * attribute group definition that lead us to prefer a separate
+   * definition cache.
+   *
+   * Email attribute definitions can return null for
+   * isSearchable. Assume they're searchable.
+   */
+  private void cacheEmailMetadataDefinition(
+      DocumentManagement documentManagement,
+      AttributeGroup emailAttributeGroup) throws IOException {
+    synchronized (this.emailAttributeDefinitions) {
+      if (this.emailAttributeDefinitions.size() == 0) {
+        AttributeGroupDefinition def =
+            documentManagement.getAttributeGroupDefinition(
+                emailAttributeGroup.getType(), emailAttributeGroup.getKey());
+        List<Attribute> attributes = def.getAttributes();
+        for (Attribute attribute : attributes) {
+          if (attribute instanceof PrimitiveAttribute) {
+            if (attribute.isSearchable() == null) {
+              attribute.setSearchable(Boolean.TRUE);
+            }
+            this.emailAttributeDefinitions.put(attribute.getKey(), attribute);
+          } else if (attribute instanceof SetAttribute) {
+            List<Attribute> setAttributes =
+                ((SetAttribute) attribute).getAttributes();
+            for (Attribute setAttribute : setAttributes) {
+              if (setAttribute instanceof PrimitiveAttribute) {
+                if (setAttribute.isSearchable() == null) {
+                  setAttribute.setSearchable(Boolean.TRUE);
+                }
+                this.emailAttributeDefinitions.put(
+                    setAttribute.getKey(), setAttribute);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   private void addChildAnchors(DocumentManagement documentManagement,
       OpentextDocId opentextDocId, Response response) {
     try {
@@ -1430,20 +1504,8 @@ public class OpentextAdaptor extends AbstractAdaptor {
       if (this.indexCategoryNames && attributeGroup.getDisplayName() != null) {
         response.addMetadata("Category", attributeGroup.getDisplayName());
       }
-      List<DataValue> dataValues = attributeGroup.getValues();
-      for (DataValue dataValue : dataValues) {
-        if (dataValue instanceof PrimitiveValue) {
-          doPrimitiveValue(
-              (PrimitiveValue) dataValue, response,
-              this.attributeDefinitions, memberService);
-        } else if (dataValue instanceof RowValue) {
-          doRowValue((RowValue) dataValue, response,
-              this.attributeDefinitions, memberService);
-        } else if (dataValue instanceof TableValue) {
-          doTableValue((TableValue) dataValue, response,
-              this.attributeDefinitions, memberService);
-        }
-      }
+      doAttributeGroup(
+          response, memberService, attributeGroup, this.attributeDefinitions);
     }
   }
 
@@ -1474,37 +1536,59 @@ public class OpentextAdaptor extends AbstractAdaptor {
   @VisibleForTesting
   void cacheCategoryDefinition(
       AttributeGroup attributeGroup, DocumentManagement documentManagement) {
-    AttributeGroupDefinition categoryDefinition =
-        this.categoryDefinitions.get(attributeGroup.getKey());
-    if (categoryDefinition == null) {
-      // Look up definition and cache attribute data if we
-      // haven't seen this category before.
-      categoryDefinition = documentManagement.getAttributeGroupDefinition(
-          attributeGroup.getType(), attributeGroup.getKey());
-      this.categoryDefinitions.put(
-          attributeGroup.getKey(), categoryDefinition);
-      List<Attribute> attributes = categoryDefinition.getAttributes();
-      for (Attribute attribute : attributes) {
-        if (attribute instanceof PrimitiveAttribute) {
-          this.attributeDefinitions.put(attribute.getKey(), attribute);
-          if (attribute instanceof UserAttribute) {
-            this.categoriesWithUserAttributes
-                .add(categoryDefinition.getKey());
-          }
-        } else if (attribute instanceof SetAttribute) {
-          List<Attribute> setAttributes =
-              ((SetAttribute) attribute).getAttributes();
-          for (Attribute setAttribute : setAttributes) {
-            if (setAttribute instanceof PrimitiveAttribute) {
-              this.attributeDefinitions.put(
-                  setAttribute.getKey(), setAttribute);
-            }
+    synchronized (this.categoryDefinitions) {
+      AttributeGroupDefinition categoryDefinition =
+          this.categoryDefinitions.get(attributeGroup.getKey());
+      if (categoryDefinition == null) {
+        // Look up definition and cache attribute data if we
+        // haven't seen this category before.
+        categoryDefinition = documentManagement.getAttributeGroupDefinition(
+            attributeGroup.getType(), attributeGroup.getKey());
+        this.categoryDefinitions.put(
+            attributeGroup.getKey(), categoryDefinition);
+        List<Attribute> attributes = categoryDefinition.getAttributes();
+        for (Attribute attribute : attributes) {
+          if (attribute instanceof PrimitiveAttribute) {
+            this.attributeDefinitions.put(attribute.getKey(), attribute);
             if (attribute instanceof UserAttribute) {
               this.categoriesWithUserAttributes
                   .add(categoryDefinition.getKey());
             }
+          } else if (attribute instanceof SetAttribute) {
+            List<Attribute> setAttributes =
+                ((SetAttribute) attribute).getAttributes();
+            for (Attribute setAttribute : setAttributes) {
+              if (setAttribute instanceof PrimitiveAttribute) {
+                this.attributeDefinitions.put(
+                    setAttribute.getKey(), setAttribute);
+              }
+              if (attribute instanceof UserAttribute) {
+                this.categoriesWithUserAttributes
+                    .add(categoryDefinition.getKey());
+              }
+            }
           }
         }
+      }
+    }
+  }
+
+  private void doAttributeGroup(Response response, MemberService memberService,
+      AttributeGroup attributeGroup,
+      Map<String, Attribute> attributeDefinitions) {
+    List<DataValue> dataValues = attributeGroup.getValues();
+
+    for (DataValue dataValue : dataValues) {
+      if (dataValue instanceof PrimitiveValue) {
+        doPrimitiveValue(
+            (PrimitiveValue) dataValue, response,
+                attributeDefinitions, memberService);
+      } else if (dataValue instanceof RowValue) {
+        doRowValue((RowValue) dataValue, response,
+            attributeDefinitions, memberService);
+      } else if (dataValue instanceof TableValue) {
+        doTableValue((TableValue) dataValue, response,
+            attributeDefinitions, memberService);
       }
     }
   }
@@ -1554,7 +1638,9 @@ public class OpentextAdaptor extends AbstractAdaptor {
     Attribute attribute = attributeDefinitions.get(primitiveValue.getKey());
     if (attribute != null) {
       isUserAttribute = (attribute instanceof UserAttribute);
-      isSearchable = attribute.isSearchable();
+      if (attribute.isSearchable() != null) {
+        isSearchable = attribute.isSearchable();
+      }
     }
     if (this.indexSearchableAttributesOnly && !isSearchable) {
       return;

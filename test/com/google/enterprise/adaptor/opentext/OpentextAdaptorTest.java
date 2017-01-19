@@ -2884,6 +2884,108 @@ public class OpentextAdaptorTest {
         groupDefinitions.get(newGroupPrincipal("group1")));
   }
 
+  @Test
+  public void testDoEmail() throws IOException {
+    // Create the definition.
+    AttributeGroupDefinition definition = new AttributeGroupDefinition();
+    definition.setDisplayName("Email Properties");
+    definition.setID(1);
+    definition.setKey("1");
+    definition.setType("OTEmailProperties");
+    PrimitiveAttribute toAttribute = new PrimitiveAttribute();
+    toAttribute.setDisplayName("To");
+    toAttribute.setID(3);
+    toAttribute.setKey("To");
+    definition.getAttributes().add(toAttribute);
+    PrimitiveAttribute fromAttribute = new PrimitiveAttribute();
+    fromAttribute.setDisplayName("From");
+    fromAttribute.setID(4);
+    fromAttribute.setKey("From");
+    definition.getAttributes().add(fromAttribute);
+    PrimitiveAttribute subjAttribute = new PrimitiveAttribute();
+    subjAttribute.setDisplayName("Subject");
+    subjAttribute.setID(2);
+    subjAttribute.setKey("Subject");
+    definition.getAttributes().add(subjAttribute);
+    PrimitiveAttribute emailAttribute = new PrimitiveAttribute();
+    emailAttribute.setDisplayName("Email Address");
+    emailAttribute.setID(21);
+    emailAttribute.setKey("EmailAddress");
+    SetAttribute participantsAttributeSet = new SetAttribute();
+    participantsAttributeSet.getAttributes().add(emailAttribute);
+    definition.getAttributes().add(participantsAttributeSet);
+
+    // Create the test attributes (metadata).
+    AttributeGroup attributeGroup = new AttributeGroup();
+    attributeGroup.setKey("1");
+    attributeGroup.setType("OTEmailProperties");
+    StringValue toValue = new StringValue();
+    toValue.setDescription("To");
+    toValue.setKey("To");
+    toValue.getValues().add("to@example.com");
+    attributeGroup.getValues().add(toValue);
+    StringValue fromValue = new StringValue();
+    fromValue.setDescription("From");
+    fromValue.setKey("From");
+    fromValue.getValues().add("from@example.com");
+    attributeGroup.getValues().add(fromValue);
+    StringValue subjValue = new StringValue();
+    subjValue.setDescription("Subject");
+    subjValue.setKey("Subject");
+    subjValue.getValues().add("Message Subject");
+    attributeGroup.getValues().add(subjValue);
+    StringValue emailValue = new StringValue();
+    emailValue.setDescription("Email Address");
+    emailValue.setKey("EmailAddress");
+    emailValue.getValues().add("from@example.com");
+    RowValue participantRowValue = new RowValue();
+    participantRowValue.getValues().add(emailValue);
+    TableValue participantTableValue = new TableValue();
+    participantTableValue.getValues().add(participantRowValue);
+    attributeGroup.getValues().add(participantTableValue);
+    Metadata metadata = new Metadata();
+    metadata.getAttributeGroups().add(attributeGroup);
+
+    // Set up the adaptor instance with the test data.
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+
+    DocId docId = new DocId("2000/Email Message:3143");
+    OpentextDocId testDocId = new OpentextDocId(docId);
+    NodeMock emailNode =
+        new NodeMock(3143, "Email Message", "Email");
+    emailNode.setMetadata(metadata);
+    emailNode.setVersion(1, "application/vnd.ms-outlook",
+        new GregorianCalendar(2015, 1, 3, 9, 42, 42));
+    soapFactory.documentManagementMock.addNode(emailNode);
+    soapFactory.documentManagementMock.addCategoryDefinition(
+        definition);
+
+    RequestMock requestMock = new RequestMock(docId);
+    Request request = Proxies.newProxyInstance(Request.class, requestMock);
+    ResponseMock responseMock = new ResponseMock();
+    adaptor.doEmail(soapFactory.newDocumentManagement("token"),
+        testDocId, emailNode,
+        Proxies.newProxyInstance(Request.class, requestMock),
+        Proxies.newProxyInstance(Response.class, responseMock));
+    Map<String, List<String>> responseMetadata = responseMock.getMetadata();
+    assertEquals(Lists.newArrayList("to@example.com"),
+        responseMetadata.get("To"));
+    assertEquals(Lists.newArrayList("from@example.com"),
+        responseMetadata.get("From"));
+    assertEquals(Lists.newArrayList("Message Subject"),
+        responseMetadata.get("Subject"));
+    assertEquals(Lists.newArrayList("from@example.com"),
+        responseMetadata.get("Email Address")); // From Participants table
+    // Check that the node version content was also sent.
+    assertEquals("application/vnd.ms-outlook", responseMock.contentType);
+    assertEquals("this is the content",
+        responseMock.outputStream.toString("UTF-8"));
+  }
+
   private class SoapFactoryMock implements SoapFactory {
     private AuthenticationMock authenticationMock;
     private DocumentManagementMock documentManagementMock;
