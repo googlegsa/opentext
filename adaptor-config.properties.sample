@@ -47,11 +47,11 @@ opentext.publicAccessGroupEnabled = true|false
 # it using the name listed here: Alias, Category, CategoryFolder,
 # Channel, Collection, CompoundDoc, Discussion, Document, Email,
 # EmailFolder, EnterpriseWS, Folder, Generation, Milestone, News,
-# PersonalWS, Project, Reply, Report, Task, TaskGroup, TaskList,
-# Topic, URL, WFMap.
+# PersonalWS, Project, Reply, Report, SocialObject, Task,
+# TaskGroup, TaskList, Topic, URL, WFMap.
 #
 # Otherwise, you may use the Content Server numeric object type.
-opentext.excludedNodeTypes = WFMap, 384
+opentext.excludedNodeTypes = WFMap, 223, 230, 384, 480, 30309
 opentext.excludedNodeTypes.separator = ,
 
 # Indicates whether to index folders and their metadata or not.
@@ -77,10 +77,13 @@ opentext.includedNodeFeatures.URL = Location
 # node types as listed above for excludedNodeTypes.
 # 146 = CustomView
 # 218 = Poll
+# 223 = Form
+# 230 = Form Template
 # 384 = Prospector
 # 480 = Appearance
 # 483 = Appearance Workspace Folder
 # 899 = Virtual Folder
+# 30309 = ActiveView
 opentext.displayUrl.objAction.146 = properties
 opentext.displayUrl.objAction.218 = OpenPoll
 opentext.displayUrl.objAction.384 = ProspectorBrowse
