@@ -1,6 +1,13 @@
 # Sample Config file for OpenText Adaptor
 gsa.hostname = <GSA hostname>
 
+# Directory Services config
+# If the connector should authenticate against an OpenText
+# Directory Services instance, set directoryServicesUrl to the
+# web services URL for the instance.
+# directoryServicesUrl example: http://<host>:<port>/otdsws/services/
+# opentext.directoryServicesUrl = <Base URL for Directory Services>
+
 # Content Web Services config
 # IIS webServicesUrl example: http://<host>[:<port>]/cws
 # Tomcat webServicesUrl example: http://<host>[:<port>]/cws/services

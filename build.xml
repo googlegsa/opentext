@@ -179,6 +179,16 @@ lib/plexi submodule or add the the command line argument
         <include name="Collaboration-5.xsd"/>
       </fileset>
     </copy>
+    <!-- Directory Services API -->
+
+    <wsimport service="Authentication-ds"/>
+    <copy todir="${build-generate.dir}/com/opentext/ecm/services/authws">
+      <fileset dir=".">
+        <include name="Authentication-ds.wsdl"/>
+        <include name="Authentication-ds-1.xsd"/>
+        <include name="Authentication-ds-2.xsd"/>
+      </fileset>
+    </copy>
   </target>
 
   <target name="-real-build" depends="-plexi-build,-generate">

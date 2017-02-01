@@ -38,6 +38,8 @@ import com.google.enterprise.adaptor.Request;
 import com.google.enterprise.adaptor.Response;
 import com.google.enterprise.adaptor.UserPrincipal;
 
+import com.opentext.ecm.services.authws.AuthenticationException;
+import com.opentext.ecm.services.authws.AuthenticationException_Exception;
 import com.opentext.livelink.service.collaboration.Collaboration;
 import com.opentext.livelink.service.collaboration.DiscussionItem;
 import com.opentext.livelink.service.collaboration.MilestoneInfo;
@@ -139,6 +141,7 @@ public class OpentextAdaptorTest {
   @Test
   public void testSoapFactoryImplServerTomcat() {
     Config config = new Config();
+    config.addKey("opentext.directoryServicesUrl", "");
     config.addKey("opentext.webServicesUrl", "webServicesUrl/");
     config.addKey("opentext.webServicesServer", "Tomcat");
     SoapFactoryImpl factory = new SoapFactoryImpl();
@@ -153,6 +156,7 @@ public class OpentextAdaptorTest {
   public void testSoapFactoryImplServerUnset() {
     SoapFactoryImpl soapFactory = new SoapFactoryImpl();
     Config config = new Config();
+    config.addKey("opentext.directoryServicesUrl", "");
     config.addKey("opentext.webServicesUrl", "webServicesUrl");
     config.addKey("opentext.webServicesServer", "");
 
@@ -167,6 +171,7 @@ public class OpentextAdaptorTest {
   public void testSoapFactoryImplServerIis() {
     SoapFactoryImpl soapFactory = new SoapFactoryImpl();
     Config config = new Config();
+    config.addKey("opentext.directoryServicesUrl", "");
     config.addKey("opentext.webServicesUrl", "webServicesUrl");
     config.addKey("opentext.webServicesServer", "IIS");
 
@@ -184,6 +189,7 @@ public class OpentextAdaptorTest {
   @Test
   public void testSoapFactoryImplGetWebServiceAddress() {
     Config config = new Config();
+    config.addKey("opentext.directoryServicesUrl", "");
     config.addKey("opentext.webServicesUrl", "webServicesUrl");
     config.addKey("opentext.webServicesServer", "Tomcat");
     SoapFactoryImpl factory = new SoapFactoryImpl();
@@ -273,6 +279,63 @@ public class OpentextAdaptorTest {
     Config config = initConfig(adaptor, context);
     config.overrideKey("opentext.adminUsername", "invaliduser");
     config.overrideKey("opentext.adminPassword", "validpassword");
+    adaptor.init(context);
+  }
+
+  @Test
+  public void testAuthenticateUserDirectoryServices() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    assertFalse("authenticate called before init",
+        soapFactory.dsAuthenticationMock.authenticateCalled);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.directoryServicesUrl", "/otdsws/");
+    adaptor.init(context);
+    assertFalse("authUser called after init",
+        soapFactory.authenticationMock.authenticateUserCalled);
+    assertTrue("authenticate not called after init",
+        soapFactory.dsAuthenticationMock.authenticateCalled);
+    assertTrue("validateUser not called after init",
+        soapFactory.authenticationMock.validateUserCalled);
+    assertEquals("unexpected authentication token", "validation_token",
+        soapFactory.authenticationMock.authenticationToken);
+  }
+
+  @Test
+  public void testAuthenticateUserDirectoryServicesInvalidUser() {
+    thrown.expect(InvalidConfigurationException.class);
+    thrown.expectMessage("Authentication failed");
+
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    assertFalse("authenticate called before init",
+        soapFactory.dsAuthenticationMock.authenticateCalled);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.directoryServicesUrl", "/otdsws/");
+
+    soapFactory.dsAuthenticationMock.faultCode =
+        "AuthenticationService.Application.AuthenticationFailed";
+    soapFactory.dsAuthenticationMock.message = "Authentication failed";
+    adaptor.init(context);
+  }
+
+  @Test
+  public void testAuthenticateUserDirectoryServicesOtherError() {
+    thrown.expect(SOAPFaultException.class);
+    thrown.expectMessage("Other failure");
+
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    assertFalse("authenticate called before init",
+        soapFactory.dsAuthenticationMock.authenticateCalled);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.directoryServicesUrl", "/otdsws/");
+
+    soapFactory.dsAuthenticationMock.faultCode = "AuthenticationService.Other";
+    soapFactory.dsAuthenticationMock.message = "Other failure";
     adaptor.init(context);
   }
 
@@ -2987,18 +3050,32 @@ public class OpentextAdaptorTest {
   }
 
   private class SoapFactoryMock implements SoapFactory {
+    private DsAuthenticationMock dsAuthenticationMock;
     private AuthenticationMock authenticationMock;
     private DocumentManagementMock documentManagementMock;
     private ContentServiceMock contentServiceMock;
     private MemberServiceMock memberServiceMock;
     private CollaborationMock collaborationMock;
+    private boolean hasDsUrl;
 
     private SoapFactoryMock() {
+      this.dsAuthenticationMock = new DsAuthenticationMock();
       this.authenticationMock = new AuthenticationMock();
       this.documentManagementMock = new DocumentManagementMock();
       this.contentServiceMock = new ContentServiceMock();
       this.memberServiceMock = new MemberServiceMock();
       this.collaborationMock = new CollaborationMock();
+    }
+
+    @Override
+    public com.opentext.ecm.services.authws.Authentication
+        newDsAuthentication() {
+      if (!hasDsUrl) {
+        return null;
+      }
+      return Proxies.newProxyInstance(
+          com.opentext.ecm.services.authws.Authentication.class,
+          this.dsAuthenticationMock);
     }
 
     @Override
@@ -3048,6 +3125,8 @@ public class OpentextAdaptorTest {
 
     @Override
     public void configure(Config config) {
+      this.hasDsUrl =
+          !config.getValue("opentext.directoryServicesUrl").isEmpty();
     }
 
     @Override
@@ -3055,8 +3134,27 @@ public class OpentextAdaptorTest {
     }
   }
 
+  private class DsAuthenticationMock {
+    private boolean authenticateCalled;
+    private String faultCode;
+    private String message;
+
+    public String authenticate(String user, String password)
+        throws AuthenticationException_Exception {
+      this.authenticateCalled = true;
+      if (this.faultCode != null) {
+        AuthenticationException e = new AuthenticationException();
+        e.setFaultCode(this.faultCode);
+        e.setMessage(this.message);
+        throw new AuthenticationException_Exception(e.getMessage(), e);
+      }
+      return "dsToken";
+    }
+  }
+
   private class AuthenticationMock {
     private boolean authenticateUserCalled;
+    private boolean validateUserCalled;
     private String authenticationToken;
 
     public String authenticateUser(String username, String password)
@@ -3083,6 +3181,12 @@ public class OpentextAdaptorTest {
       }
       throw new AssertionError(
           "Unexpected test config: " + username + "/" + password);
+    }
+
+    public String validateUser(String token) throws SOAPFaultException {
+      this.validateUserCalled = true;
+      this.authenticationToken = "validation_token";
+      return this.authenticationToken;
     }
   }
 

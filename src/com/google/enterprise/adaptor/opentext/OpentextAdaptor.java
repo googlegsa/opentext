@@ -32,6 +32,9 @@ import com.google.enterprise.adaptor.Request;
 import com.google.enterprise.adaptor.Response;
 import com.google.enterprise.adaptor.UserPrincipal;
 
+import com.opentext.ecm.services.authws.AuthenticationException;
+import com.opentext.ecm.services.authws.AuthenticationException_Exception;
+import com.opentext.ecm.services.authws.AuthenticationService;
 import com.opentext.livelink.service.collaboration.Collaboration;
 import com.opentext.livelink.service.collaboration.Collaboration_Service;
 import com.opentext.livelink.service.collaboration.DiscussionItem;
@@ -110,6 +113,9 @@ import java.util.logging.Logger;
 
 import javax.activation.DataHandler;
 import javax.xml.datatype.XMLGregorianCalendar;
+import javax.xml.namespace.QName;
+import javax.xml.soap.SOAPException;
+import javax.xml.soap.SOAPFactory;
 import javax.xml.soap.SOAPFault;
 import javax.xml.ws.BindingProvider;
 import javax.xml.ws.handler.Handler;
@@ -186,6 +192,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
 
   @Override
   public void initConfig(Config config) {
+    config.addKey("opentext.directoryServicesUrl", "");
     config.addKey("opentext.webServicesUrl", null);
     config.addKey("opentext.webServicesServer", "");
     config.addKey("opentext.username", null);
@@ -243,6 +250,8 @@ public class OpentextAdaptor extends AbstractAdaptor {
     log.log(Level.CONFIG, "opentext.webServicesUrl: {0}", webServicesUrl);
     log.log(Level.CONFIG, "opentext.webServicesServer: {0}",
         config.getValue("opentext.webServicesServer"));
+    log.log(Level.CONFIG, "opentext.directoryServicesUrl: {0}",
+        config.getValue("opentext.directoryServicesUrl"));
     log.log(Level.CONFIG, "opentext.username: {0}", username);
     this.username = username;
     this.password = password;
@@ -250,12 +259,11 @@ public class OpentextAdaptor extends AbstractAdaptor {
     Authentication authentication = soapFactory.newAuthentication();
     String authenticationToken;
     try {
-      authenticationToken =
-          authentication.authenticateUser(username, password);
+      authenticationToken = getAuthenticationToken(username, password);
     } catch (SOAPFaultException soapFaultException) {
       SOAPFault fault = soapFaultException.getFault();
       String localPart = fault.getFaultCodeAsQName().getLocalPart();
-      if ("Core.LoginFailed".equals(localPart)) {
+      if (isAuthenticationFailure(localPart)) {
         throw new InvalidConfigurationException(
             localPart + " (opentext.username: " + username + "): "
             + fault.getFaultString(),
@@ -280,12 +288,11 @@ public class OpentextAdaptor extends AbstractAdaptor {
       soapFactory.setServer(CwsServer.TOMCAT);
       authentication = soapFactory.newAuthentication();
       try {
-        authenticationToken =
-            authentication.authenticateUser(username, password);
+        authenticationToken = getAuthenticationToken(username, password);
       } catch (SOAPFaultException soapFaultException) {
         SOAPFault fault = soapFaultException.getFault();
         String localPart = fault.getFaultCodeAsQName().getLocalPart();
-        if ("Core.LoginFailed".equals(localPart)) {
+        if (isAuthenticationFailure(localPart)) {
           throw new InvalidConfigurationException(
               localPart + " (opentext.username: " + username + "): "
               + fault.getFaultString(),
@@ -310,12 +317,11 @@ public class OpentextAdaptor extends AbstractAdaptor {
         this.adminUsername = adminUsername;
         this.adminPassword = adminPassword;
         try {
-          soapFactory.newAuthentication().authenticateUser(
-              this.adminUsername, this.adminPassword);
+          getAuthenticationToken(this.adminUsername, this.adminPassword);
         } catch (SOAPFaultException soapFaultException) {
           SOAPFault fault = soapFaultException.getFault();
           String localPart = fault.getFaultCodeAsQName().getLocalPart();
-          if ("Core.LoginFailed".equals(localPart)) {
+          if (isAuthenticationFailure(localPart)) {
             throw new InvalidConfigurationException(
                 localPart
                 + " (opentext.adminUsername: " + this.adminUsername + "): "
@@ -484,11 +490,17 @@ public class OpentextAdaptor extends AbstractAdaptor {
         };
   }
 
+  private boolean isAuthenticationFailure(String code) {
+    return "Core.LoginFailed".equals(code)
+        || "AuthenticationService.Application.AuthenticationFailed"
+        .equals(code);
+  }
+
   @Override
   public void getDocIds(DocIdPusher pusher) throws InterruptedException {
     Authentication authentication = this.soapFactory.newAuthentication();
     String authenticationToken =
-        authentication.authenticateUser(this.username, this.password);
+        getAuthenticationToken(this.username, this.password);
     DocumentManagement documentManagement =
         soapFactory.newDocumentManagement(authenticationToken);
     ArrayList<DocId> docIds = new ArrayList<DocId>();
@@ -661,7 +673,7 @@ public class OpentextAdaptor extends AbstractAdaptor {
 
     Authentication authentication = this.soapFactory.newAuthentication();
     String authenticationToken =
-        authentication.authenticateUser(this.username, this.password);
+        getAuthenticationToken(this.username, this.password);
     DocumentManagement documentManagement =
         this.soapFactory.newDocumentManagement(authenticationToken);
     OpentextDocId opentextDocId = new OpentextDocId(req.getDocId());
@@ -739,8 +751,8 @@ public class OpentextAdaptor extends AbstractAdaptor {
       Authentication authentication = this.soapFactory.newAuthentication();
       String authenticationToken;
       try {
-        authenticationToken = authentication.authenticateUser(
-            this.adminUsername, this.adminPassword);
+        authenticationToken =
+            getAuthenticationToken(this.adminUsername, this.adminPassword);
         documentManagement =
             this.soapFactory.newDocumentManagement(authenticationToken);
       } catch (SOAPFaultException soapFaultException) {
@@ -1823,8 +1835,50 @@ public class OpentextAdaptor extends AbstractAdaptor {
         xmlCalendar.toGregorianCalendar().getTime());
   }
 
+  private String getAuthenticationToken(String username, String password) {
+    com.opentext.ecm.services.authws.Authentication dsAuthentication =
+        this.soapFactory.newDsAuthentication();
+    if (dsAuthentication == null) {
+      return this.soapFactory.newAuthentication().authenticateUser(
+          username, password);
+    } else {
+      String dsAuthToken;
+      try {
+        dsAuthToken = dsAuthentication.authenticate(username, password);
+      } catch (AuthenticationException_Exception e) {
+        // Construct a SOAPFaultException and throw that to make
+        // this more like the direct Content Server
+        // Authentication service
+        String localPart = "Local.AuthenticationException";
+        StringBuilder message = new StringBuilder(e.getMessage());
+        AuthenticationException authException = e.getFaultInfo();
+        if (authException != null) {
+          localPart = authException.getFaultCode();
+          if (authException.getParameters() != null) {
+            for (AuthenticationException.Parameters.Entry param
+                     : authException.getParameters().getEntry()) {
+              message.append(" [").append(param.getKey()).append(" = ")
+                  .append(param.getValue()).append("]");
+            }
+          }
+        }
+        try {
+          throw new SOAPFaultException(
+              SOAPFactory.newInstance().createFault(
+                  message.toString(),
+                  new QName("urn:api.ecm.opentext.com", localPart, "")));
+        } catch (SOAPException se) {
+          // Unable to construct a SOAPFaultException; throw the original
+          throw new RuntimeException(message.toString(), e);
+        }
+      }
+      return this.soapFactory.newAuthentication().validateUser(dsAuthToken);
+    }
+  }
+
   @VisibleForTesting
   interface SoapFactory {
+    com.opentext.ecm.services.authws.Authentication newDsAuthentication();
     Authentication newAuthentication();
     DocumentManagement newDocumentManagement(String authenticationToken);
     ContentService newContentService(DocumentManagement documentManagement);
@@ -1836,15 +1890,19 @@ public class OpentextAdaptor extends AbstractAdaptor {
 
   @VisibleForTesting
   static class SoapFactoryImpl implements SoapFactory {
+    private final AuthenticationService dsAuthenticationService;
     private final Authentication_Service authenticationService;
     private final DocumentManagement_Service documentManagementService;
     private final ContentService_Service contentServiceService;
     private final MemberService_Service memberServiceService;
     private final Collaboration_Service collaborationService;
+    private String directoryServicesUrl;
     private String webServicesUrl;
     private boolean iis;
 
     SoapFactoryImpl() {
+      this.dsAuthenticationService = new AuthenticationService(
+          AuthenticationService.class.getResource("Authentication-ds.wsdl"));
       this.authenticationService = new Authentication_Service(
           Authentication_Service.class.getResource("Authentication.wsdl"));
       this.documentManagementService = new DocumentManagement_Service(
@@ -1866,6 +1924,20 @@ public class OpentextAdaptor extends AbstractAdaptor {
         this.webServicesUrl += "/";
       }
       return this.webServicesUrl + serviceName + (iis ? ".svc" : "");
+    }
+
+    @Override
+    public com.opentext.ecm.services.authws.Authentication
+        newDsAuthentication() {
+      if (this.directoryServicesUrl.isEmpty()) {
+        return null;
+      }
+      com.opentext.ecm.services.authws.Authentication dsAuthenticationPort =
+          this.dsAuthenticationService.getAuthenticationPort();
+      ((BindingProvider) dsAuthenticationPort).getRequestContext().put(
+          BindingProvider.ENDPOINT_ADDRESS_PROPERTY,
+          this.directoryServicesUrl + "Authentication");
+      return dsAuthenticationPort;
     }
 
     @Override
@@ -1965,6 +2037,13 @@ public class OpentextAdaptor extends AbstractAdaptor {
 
     @Override
     public void configure(Config config) {
+      this.directoryServicesUrl =
+          config.getValue("opentext.directoryServicesUrl");
+      if (!this.directoryServicesUrl.isEmpty()) {
+        if (!this.directoryServicesUrl.endsWith("/")) {
+          this.directoryServicesUrl += "/";
+        }
+      }
       this.webServicesUrl = config.getValue("opentext.webServicesUrl");
       String server = config.getValue("opentext.webServicesServer");
       if (server.isEmpty()) {
