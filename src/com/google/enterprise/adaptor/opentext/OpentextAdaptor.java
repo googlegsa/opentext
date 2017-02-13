@@ -492,8 +492,15 @@ public class OpentextAdaptor extends AbstractAdaptor {
 
   private boolean isAuthenticationFailure(String code) {
     return "Core.LoginFailed".equals(code)
+        || "Core.FailedToAuthenticateWithOTDS".equals(code)
         || "AuthenticationService.Application.AuthenticationFailed"
         .equals(code);
+  }
+
+  private boolean isPermissionsFailure(
+      SOAPFaultException soapFaultException) {
+    return "DocMan.PermissionsError".equals(
+        soapFaultException.getFault().getFaultCodeAsQName().getLocalPart());
   }
 
   @Override
@@ -676,7 +683,16 @@ public class OpentextAdaptor extends AbstractAdaptor {
         getAuthenticationToken(this.username, this.password);
     DocumentManagement documentManagement =
         this.soapFactory.newDocumentManagement(authenticationToken);
-    OpentextDocId opentextDocId = new OpentextDocId(req.getDocId());
+    OpentextDocId opentextDocId;
+    try {
+      opentextDocId = new OpentextDocId(req.getDocId());
+    } catch (IllegalArgumentException e) {
+      // Non-Content Server doc ids can be generated within the
+      // GSA from, for example, links within crawled documents.
+      log.log(Level.FINE, "Invalid doc id {0}", req.getDocId());
+      resp.respondNotFound();
+      return;
+    }
     Node node = getNode(documentManagement, opentextDocId);
     if (node == null) {
       log.log(Level.INFO, "Not found: {0}", opentextDocId);
@@ -901,9 +917,16 @@ public class OpentextAdaptor extends AbstractAdaptor {
       containerContents = documentManagement.listNodes(containerNode.getID(),
           true);
     } catch (SOAPFaultException soapFaultException) {
-      log.log(Level.WARNING,
-          "Error retrieving container contents: " + opentextDocId,
-          soapFaultException);
+      if (isPermissionsFailure(soapFaultException)) {
+        log.log(Level.FINE, "{0}: {1}",
+            new Object[] {
+              soapFaultException.getFault().getFaultString(), opentextDocId });
+        response.respondNotFound();
+      } else {
+        log.log(Level.WARNING,
+            "Error retrieving container contents: " + opentextDocId,
+            soapFaultException);
+      }
       return;
     }
 
@@ -1032,8 +1055,23 @@ public class OpentextAdaptor extends AbstractAdaptor {
           "Document does not support versions: " + opentextDocId);
     }
 
-    Version version = documentManagement.getVersion(documentNode.getID(),
+    Version version;
+    try {
+      version = documentManagement.getVersion(documentNode.getID(),
         this.currentVersionType);
+    } catch (SOAPFaultException soapFaultException) {
+      if (isPermissionsFailure(soapFaultException)) {
+        log.log(Level.FINE, "{0}: {1}",
+            new Object[] {
+              soapFaultException.getFault().getFaultString(), opentextDocId });
+        response.respondNotFound();
+      } else {
+        log.log(Level.WARNING,
+            "Error retrieving version: " + opentextDocId,
+            soapFaultException);
+      }
+      return;
+    }
     XMLGregorianCalendar fileModifyDate = version.getFileModifyDate();
     if (fileModifyDate != null
         && request.canRespondWithNoContent(
