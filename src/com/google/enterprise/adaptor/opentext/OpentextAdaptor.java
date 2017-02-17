@@ -499,8 +499,10 @@ public class OpentextAdaptor extends AbstractAdaptor {
 
   private boolean isPermissionsFailure(
       SOAPFaultException soapFaultException) {
-    return "DocMan.PermissionsError".equals(
-        soapFaultException.getFault().getFaultCodeAsQName().getLocalPart());
+    String code =
+        soapFaultException.getFault().getFaultCodeAsQName().getLocalPart();
+    return "DocMan.PermissionsError".equals(code)
+        || "DocMan.VersionRetrievalError".equals(code);
   }
 
   @Override
