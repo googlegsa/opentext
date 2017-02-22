@@ -30,7 +30,11 @@
   </condition>
   <!-- If adaptor.version isn't set, simply use the current date. -->
   <property name="adaptor.suffix" value="-${DSTAMP}"/>
-
+  <property file="build.properties"/>
+  <property name="compile.java.version" value="7"/>
+  <property name="compile.java.bootclasspath"
+            value="${build.bootclasspath}"/>
+  
   <path id="adaptor.build.classpath">
 <!--
     <fileset dir="${lib.dir}">
@@ -117,8 +121,7 @@ lib/plexi submodule or add the the command line argument
       <exec executable="wsimport">
         <arg value="-s"/>
         <arg value="${generate.dir}"/>
-        <arg value="-d"/>
-        <arg value="${build-generate.dir}"/>
+        <arg value="-Xnocompile"/>
         <arg value="-wsdllocation"/>
         <arg value="@{service}.wsdl"/>
         <arg value="@{service}.wsdl"/>
@@ -129,11 +132,24 @@ lib/plexi submodule or add the the command line argument
   <target name="-generate" depends="-generate-test-uptodate"
     unless="generate.uptodate">
     <delete dir="${generate.dir}"/>
-    <delete dir="${build-generate.dir}"/>
     <mkdir dir="${generate.dir}"/>
-    <mkdir dir="${build-generate.dir}"/>
 
     <wsimport service="Authentication"/>
+    <wsimport service="DocumentManagement"/>
+    <wsimport service="ContentService"/>
+    <wsimport service="MemberService"/>
+    <wsimport service="Collaboration"/>
+    <wsimport service="Authentication-ds"/>
+
+    <delete dir="${build-generate.dir}"/>
+    <mkdir dir="${build-generate.dir}"/>
+    <javac srcdir="${generate.dir}" destdir="${build-generate.dir}" debug="true"
+      includeantruntime="false" encoding="utf-8"
+      source="${compile.java.version}" target="${compile.java.version}">
+      <bootclasspath path="${compile.java.bootclasspath}"/>
+      <compilerarg value="-Xlint:unchecked"/>
+    </javac>
+
     <copy todir="${build-generate.dir}/com/opentext/livelink/service/core/">
       <fileset dir=".">
         <include name="Authentication.wsdl"/>
@@ -141,7 +157,6 @@ lib/plexi submodule or add the the command line argument
         <include name="Authentication-2.xsd"/>
       </fileset>
     </copy>
-    <wsimport service="DocumentManagement"/>
     <copy todir="${build-generate.dir}/com/opentext/livelink/service/docman/">
       <fileset dir=".">
         <include name="DocumentManagement.wsdl"/>
@@ -150,7 +165,6 @@ lib/plexi submodule or add the the command line argument
         <include name="DocumentManagement-3.xsd"/>
       </fileset>
     </copy>
-    <wsimport service="ContentService"/>
     <copy todir="${build-generate.dir}/com/opentext/livelink/service/core/">
       <fileset dir=".">
         <include name="ContentService.wsdl"/>
@@ -159,7 +173,6 @@ lib/plexi submodule or add the the command line argument
         <include name="ContentService-3.xsd"/>
       </fileset>
     </copy>
-    <wsimport service="MemberService"/>
     <copy todir="${build-generate.dir}/com/opentext/livelink/service/memberservice/">
       <fileset dir=".">
         <include name="MemberService.wsdl"/>
@@ -168,7 +181,6 @@ lib/plexi submodule or add the the command line argument
         <include name="MemberService-3.xsd"/>
       </fileset>
     </copy>
-    <wsimport service="Collaboration"/>
     <copy todir="${build-generate.dir}/com/opentext/livelink/service/collaboration/">
       <fileset dir=".">
         <include name="Collaboration.wsdl"/>
@@ -180,8 +192,6 @@ lib/plexi submodule or add the the command line argument
       </fileset>
     </copy>
     <!-- Directory Services API -->
-
-    <wsimport service="Authentication-ds"/>
     <copy todir="${build-generate.dir}/com/opentext/ecm/services/authws">
       <fileset dir=".">
         <include name="Authentication-ds.wsdl"/>
@@ -195,7 +205,9 @@ lib/plexi submodule or add the the command line argument
     <mkdir dir="${build-src.dir}"/>
 
     <javac srcdir="${src.dir}" destdir="${build-src.dir}" debug="true"
-      includeantruntime="false" encoding="utf-8">
+      includeantruntime="false" encoding="utf-8"
+      source="${compile.java.version}" target="${compile.java.version}">
+      <bootclasspath path="${compile.java.bootclasspath}"/>
       <compilerarg value="-Xlint:unchecked"/>
       <classpath refid="adaptor.build.classpath"/>
     </javac>
@@ -203,7 +215,9 @@ lib/plexi submodule or add the the command line argument
     <mkdir dir="${build-test.dir}"/>
     <!-- Compile JUnit helper -->
     <javac srcdir="${lib.dir}" destdir="${build-test.dir}" debug="true"
-      includeantruntime="true" encoding="utf-8">
+      includeantruntime="true" encoding="utf-8"
+      source="${compile.java.version}" target="${compile.java.version}">
+      <bootclasspath path="${compile.java.bootclasspath}"/>
       <compilerarg value="-Xlint:unchecked"/>
       <classpath location="${junit.jar}"/>
       <include name="JUnitLogFixFormatter.java"/>
@@ -211,7 +225,9 @@ lib/plexi submodule or add the the command line argument
 
     <!-- Compile tests, excluding example tests. -->
     <javac srcdir="${test.dir}" destdir="${build-test.dir}" debug="true"
-      includeantruntime="false" encoding="utf-8">
+      includeantruntime="false" encoding="utf-8"
+      source="${compile.java.version}" target="${compile.java.version}">
+      <bootclasspath path="${compile.java.bootclasspath}"/>
       <compilerarg value="-Xlint:unchecked"/>
       <classpath refid="adaptor.build.classpath"/>
       <classpath location="${build-src.dir}"/>

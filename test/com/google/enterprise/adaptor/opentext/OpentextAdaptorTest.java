@@ -555,7 +555,7 @@ public class OpentextAdaptorTest {
     Map<GroupPrincipal, List<Principal>> expected =
         new HashMap<GroupPrincipal, List<Principal>>();
     expected.put(newGroupPrincipal("group1"),
-        Lists.newArrayList(newUserPrincipal("user1")));
+        Lists.<Principal>newArrayList(newUserPrincipal("user1")));
     assertEquals(expected, docIdPusherMock.groupDefinitions);
   }
 
