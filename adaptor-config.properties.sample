@@ -1,4 +1,4 @@
-# Sample Config file for OpenText Adaptor
+# Sample Config file for the Connector for OpenText
 gsa.hostname = <GSA hostname>
 
 # Directory Services config

@@ -1,5 +1,5 @@
 <project name="plexi.opentext" default="build" basedir=".">
-  <description>OpenText Adaptor</description>
+  <description>Connector for OpenText</description>
   <tstamp/>
   <property name="src.dir" location="src"/>
   <property name="test.dir" location="test"/>
@@ -273,7 +273,7 @@ lib/plexi submodule or add the the command line argument
         <attribute name="Class-Path" value="${tmp.adaptor.classpath}"/>
         <section name="com/google/enterprise/adaptor/opentext/">
           <attribute name="Implementation-Title"
-            value="Google OpenText Adaptor"/>
+            value="Google Search Appliance Connector for OpenText"/>
           <attribute name="Implementation-Vendor" value="Google Inc."/>
           <attribute name="Implementation-Version"
             value="${adaptor.version}"/>
