@@ -32,6 +32,7 @@ import com.google.enterprise.adaptor.Config;
 import com.google.enterprise.adaptor.DocId;
 import com.google.enterprise.adaptor.DocIdPusher;
 import com.google.enterprise.adaptor.GroupPrincipal;
+import com.google.enterprise.adaptor.IOHelper;
 import com.google.enterprise.adaptor.InvalidConfigurationException;
 import com.google.enterprise.adaptor.Principal;
 import com.google.enterprise.adaptor.Request;
@@ -81,17 +82,24 @@ import com.opentext.livelink.service.memberservice.MemberSearchResults;
 import com.opentext.livelink.service.memberservice.MemberService;
 import com.opentext.livelink.service.memberservice.SearchFilter;
 import com.opentext.livelink.service.memberservice.User;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
+import com.sun.net.httpserver.HttpServer;
 
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
+import org.w3c.dom.Element;
+import org.xml.sax.InputSource;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.StringReader;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -109,6 +117,8 @@ import javax.xml.datatype.DatatypeConfigurationException;
 import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
 import javax.xml.namespace.QName;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.soap.SOAPException;
 import javax.xml.soap.SOAPFactory;
 import javax.xml.soap.SOAPFault;
@@ -124,6 +134,14 @@ public class OpentextAdaptorTest {
   private static final String LOCAL_NAMESPACE =
       GLOBAL_NAMESPACE + "_example-com";
 
+  private static final String RESPONSE_NO_RESULTS =
+      "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+      + "<Output>"
+      + "  <SearchResultsInformation>"
+      + "    <CurrentStartAt>1</CurrentStartAt>"
+      + "    <NumberResultsThisPage>0</NumberResultsThisPage>"
+      + "  </SearchResultsInformation>"
+      + "</Output>";
 
   @BeforeClass
   public static void setUpClass() {
@@ -3048,6 +3066,538 @@ public class OpentextAdaptorTest {
     assertEquals("this is the content",
         responseMock.outputStream.toString("UTF-8"));
   }
+
+  @Test
+  public void testLastModifiedQuery() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.src", "1234,5678");
+    adaptor.init(context);
+
+    String query = adaptor.getLastModifiedQuery();
+    assertTrue(query, query.contains("Location_ID1=1234"));
+    assertTrue(query, query.contains("Location_ID2=5678"));
+    assertTrue(query,
+        query.contains("QLREGION+%22OTModifyTime%22%5D+%3E+%22000000%22"));
+  }
+
+  @Test
+  public void testGetXmlSearchCountResults() throws Exception {
+    String response =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        + "<Output>"
+        + "  <SearchResultsInformation>"
+        + "    <CurrentStartAt>1</CurrentStartAt>"
+        + "    <NumberResultsThisPage>23</NumberResultsThisPage>"
+        + "  </SearchResultsInformation>"
+        + "</Output>";
+    assertXmlSearchCount(23, response);
+  }
+
+  @Test
+  public void testGetXmlSearchCountNoResults() throws Exception {
+    assertXmlSearchCount(0, RESPONSE_NO_RESULTS);
+  }
+
+  @Test
+  public void testGetXmlSearchCountMissing() throws Exception {
+    String response =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        + "<Output>"
+        + "  <SearchResultsInformation>"
+        + "    <CurrentStartAt>1</CurrentStartAt>"
+        + "  </SearchResultsInformation>"
+        + "</Output>";
+    assertXmlSearchCount(0, response);
+  }
+
+  @Test
+  public void testGetXmlSearchIds() throws Exception {
+    String response =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        + "<SearchResult>"
+        + "  <OTLocation>"
+        + "  <![CDATA[2000 12448 11903 12350 12454 -12454 23336]]>"
+        + " </OTLocation>"
+        + "</SearchResult>";
+
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+
+    List<String> ids = adaptor.getXmlSearchIds(parseXml(response));
+    assertEquals(
+        Lists.newArrayList("2000", "12448", "11903", "12350", "12454", "23336"),
+        ids);
+  }
+
+  @Test
+  public void testGetXmlSearchIdsOneId() throws Exception {
+    String response =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        + "<SearchResult>"
+        + "  <OTLocation>"
+        + "  <![CDATA[2000]]>"
+        + " </OTLocation>"
+        + "</SearchResult>";
+
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+
+    List<String> ids = adaptor.getXmlSearchIds(parseXml(response));
+    assertEquals(Lists.newArrayList("2000"), ids);
+  }
+
+  /* This is just a test of (unexpected) bad output. */
+  @Test
+  public void testGetXmlSearchIdsMissingIds() throws Exception {
+    String response =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        + "<SearchResult>"
+        + "</SearchResult>";
+
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+
+    List<String> ids = adaptor.getXmlSearchIds(parseXml(response));
+    assertEquals(Lists.newArrayList(), ids);
+  }
+
+  /* This is just a test of (unexpected) bad output. */
+  @Test
+  public void testGetXmlSearchIdsNonNumericIds() throws Exception {
+    String response =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        + "<SearchResult>"
+        + "  <OTLocation>"
+        + "  <![CDATA[2000 foo 1000]]>"
+        + "  </OTLocation>"
+        + "</SearchResult>";
+
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+
+    List<String> ids = adaptor.getXmlSearchIds(parseXml(response));
+    assertEquals(Lists.newArrayList(), ids);
+    assertNull(response, adaptor.getXmlSearchDocId(parseXml(response)));
+  }
+
+  @Test
+  public void testGetXmlSearchNames() throws Exception {
+    String response =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        + "<SearchResult>"
+        + "  <OTLocationPath> "
+        + "    <LocationPathString>"
+        + "    Enterprise:Folder 1:Folder 2"
+        + "    </LocationPathString>"
+        + "  </OTLocationPath> "
+        + "</SearchResult>";
+
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+
+    List<String> names = adaptor.getXmlSearchNames(parseXml(response));
+    assertEquals(
+        Lists.newArrayList("Enterprise", "Folder 1", "Folder 2"),
+        names);
+  }
+
+  @Test
+  public void testXmlSearchDocIdStartPointResult() throws Exception {
+    String response =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        + "<SearchResult>"
+        + "  <OTLocation>"
+        + "  <![CDATA[2000 1234 5678]]>"
+        + " </OTLocation>"
+        + "</SearchResult>";
+
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.src", "5678");
+    adaptor.init(context);
+
+    String docId = adaptor.getXmlSearchDocId(parseXml(response));
+    assertEquals("5678:5678", docId);
+  }
+
+  @Test
+  public void testXmlSearchDocIdNoStartPoint() throws Exception {
+    String response =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        + "<SearchResult>"
+        + "  <OTLocation>"
+        + "  <![CDATA[2000 1234 5678]]>"
+        + " </OTLocation>"
+        + "</SearchResult>";
+
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.src", "9012");
+    adaptor.init(context);
+
+    String docId = adaptor.getXmlSearchDocId(parseXml(response));
+    assertEquals(null, docId);
+  }
+
+  @Test
+  public void testXmlSearchDocIdNameIdMismatch() throws Exception {
+    String response =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        + "<SearchResult>"
+        + "  <OTLocation>"
+        + "  <![CDATA[2000 1234 5678 9012 3456 7890]]>"
+        + " </OTLocation>"
+        + "  <OTLocationPath> "
+        + "    <LocationPathString>"
+        + "    Enterprise:Folder 1"
+        + "    </LocationPathString>"
+        + "  </OTLocationPath> "
+        + "</SearchResult>";
+
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.src", "1234");
+    adaptor.init(context);
+
+    String docId = adaptor.getXmlSearchDocId(parseXml(response));
+    assertEquals(null, docId);
+  }
+
+  @Test
+  public void testXmlSearchDocIdEnterpriseWs() throws Exception {
+    String response =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        + "<SearchResult>"
+        + "  <OTLocation>"
+        + "  <![CDATA[2000]]>"
+        + " </OTLocation>"
+        + "  <OTLocationPath> "
+        + "    <LocationPathString>"
+        + "    Enterprise"
+        + "    </LocationPathString>"
+        + "  </OTLocationPath> "
+        + "</SearchResult>";
+
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.src", "EnterpriseWS");
+    adaptor.init(context);
+
+    String docId = adaptor.getXmlSearchDocId(parseXml(response));
+    assertEquals("EnterpriseWS:2000", docId);
+  }
+
+  @Test
+  public void testXmlSearchDocIdNestedStartPoint() throws Exception {
+    String response =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        + "<SearchResult>"
+        + " <OTLocation>"
+        + "  <![CDATA[2000 1234 5678 9012]]>"
+        + " </OTLocation>"
+        + " <OTLocationPath> "
+        + "   <LocationPathString>"
+        + "    Enterprise:Folder 1:Folder 2"
+        + "   </LocationPathString>"
+        + " </OTLocationPath> "
+        + " <OTName>"
+        + "  Document"
+        + "  <Value lang=\"en\">Document</Value>"
+        + " </OTName>"
+        + "</SearchResult>";
+
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.src", "1234");
+    adaptor.init(context);
+
+    String docId = adaptor.getXmlSearchDocId(parseXml(response));
+    assertEquals("1234/Folder+2/Document:9012", docId);
+  }
+
+  @Test
+  public void testXmlSearchDocIdProject() throws Exception {
+    String response =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        + "<SearchResult>"
+        + " <OTLocation>"
+        + "  <![CDATA[2000 1234 5678 -5678 9012]]>"
+        + " </OTLocation>"
+        + " <OTLocationPath> "
+        + "   <LocationPathString>"
+        + "    Enterprise:Folder 1:Project 1"
+        + "   </LocationPathString>"
+        + " </OTLocationPath> "
+        + " <OTName>"
+        + "  Document"
+        + "  <Value lang=\"en\">Document</Value>"
+        + " </OTName>"
+        + "</SearchResult>";
+
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.src", "1234");
+    adaptor.init(context);
+
+    String docId = adaptor.getXmlSearchDocId(parseXml(response));
+    assertEquals("1234/Project+1/Document:9012", docId);
+  }
+
+  @Test
+  public void testGetModifiedDocIds()
+      throws IOException, InterruptedException {
+    String response1 =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        + "<Output>"
+        + "<SearchResults>"
+        + "<SearchResult>"
+        + "  <OTLocation><![CDATA[2000 1234 5678 -5678 9012]]></OTLocation>"
+        + "  <OTLocationPath>"
+        + "    <LocationPathString>"
+        + "    Enterprise:Folder 1:Project 1"
+        + "    </LocationPathString>"
+        + "  </OTLocationPath> "
+        + "  <OTName>"
+        + "    Document in Project"
+        + "    <Value lang=\"en\">Document in Project</Value>"
+        + "  </OTName>"
+        + "</SearchResult>"
+        + "<SearchResult>"
+        + "  <OTLocation><![CDATA[2000 12340 56780 90120]]></OTLocation>"
+        + "  <OTLocationPath>"
+        + "    <LocationPathString>"
+        + "    Enterprise:Folder 2:Folder 3"
+        + "    </LocationPathString>"
+        + "  </OTLocationPath> "
+        + "  <OTName>"
+        + "    Document 2"
+        + "    <Value lang=\"en\">Document 2</Value>"
+        + "  </OTName>"
+        + "</SearchResult>"
+        + "<SearchResult>"
+        + "  <OTLocation><![CDATA[2000 12341 56781]]></OTLocation>"
+        + "  <OTLocationPath>"
+        + "    <LocationPathString>"
+        + "    Enterprise:Folder 4"
+        + "   </LocationPathString>"
+        + "  </OTLocationPath> "
+        + "  <OTName>"
+        + "    Document 3"
+        + "    <Value lang=\"en\">Document 3</Value>"
+        + "  </OTName>"
+        + "</SearchResult>"
+        + "</SearchResults>"
+        + "<SearchResultsInformation>"
+        + "  <CurrentStartAt>1</CurrentStartAt>"
+        + "  <NumberResultsThisPage>3</NumberResultsThisPage>"
+        + "</SearchResultsInformation>"
+        + "</Output>";
+    String response2 =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        + "<Output>"
+        + "<SearchResults>"
+        + "<SearchResult>"
+        + "  <OTLocation><![CDATA[2000 1234 5678 -5678 90123]]></OTLocation>"
+        + "  <OTLocationPath>"
+        + "    <LocationPathString>"
+        + "    Enterprise:Folder 1:Project 1"
+        + "    </LocationPathString>"
+        + "  </OTLocationPath> "
+        + "  <OTName>"
+        + "    URL in Project"
+        + "    <Value lang=\"en\">URL in Project</Value>"
+        + "  </OTName>"
+        + "</SearchResult>"
+        + "</SearchResults>"
+        + "<SearchResultsInformation>"
+        + "  <CurrentStartAt>1</CurrentStartAt>"
+        + "  <NumberResultsThisPage>1</NumberResultsThisPage>"
+        + "</SearchResultsInformation>"
+        + "</Output>";
+
+    HttpServer server = startServer(response1, response2, RESPONSE_NO_RESULTS);
+    try {
+      SoapFactoryMock soapFactory = new SoapFactoryMock();
+      OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+      AdaptorContext context = ProxyAdaptorContext.getInstance();
+      Config config = initConfig(adaptor, context);
+      config.overrideKey("opentext.displayUrl.contentServerUrl",
+          "http://127.0.0.1:" + server.getAddress().getPort() + "/");
+      config.overrideKey("opentext.src", "1234, 56780, 12341");
+      adaptor.init(context);
+
+      DocIdPusherMock docIdPusherMock = new DocIdPusherMock();
+      adaptor.getModifiedDocIds(
+          Proxies.newProxyInstance(DocIdPusher.class, docIdPusherMock));
+      assertEquals(Lists.newArrayList(
+              new DocId("1234/Project+1/Document+in+Project:9012"),
+              new DocId("56780/Document+2:90120"),
+              new DocId("12341/Document+3:56781"),
+              new DocId("1234/Project+1/URL+in+Project:90123")),
+          docIdPusherMock.docIds);
+    } finally {
+      server.stop(0);
+    }
+  }
+
+  @Test
+  public void testGetModifiedDocIdsNoResults()
+      throws IOException, InterruptedException {
+    HttpServer server = startServer(RESPONSE_NO_RESULTS);
+    try {
+      SoapFactoryMock soapFactory = new SoapFactoryMock();
+      OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+      AdaptorContext context = ProxyAdaptorContext.getInstance();
+      Config config = initConfig(adaptor, context);
+      config.overrideKey("opentext.displayUrl.contentServerUrl",
+          "http://127.0.0.1:" + server.getAddress().getPort() + "/");
+      config.overrideKey("opentext.src", "1234, 56780, 12341");
+      adaptor.init(context);
+
+      DocIdPusherMock docIdPusherMock = new DocIdPusherMock();
+      adaptor.getModifiedDocIds(
+          Proxies.newProxyInstance(DocIdPusher.class, docIdPusherMock));
+      assertEquals(Lists.newArrayList(), docIdPusherMock.docIds);
+    } finally {
+      server.stop(0);
+    }
+  }
+
+  @Test
+  public void testGetModifiedDocIdsCheckpoint()
+      throws IOException, InterruptedException {
+    String response =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        + "<Output>"
+        + "<SearchResults>"
+        + "<SearchResult>"
+        + "  <OTLocation><![CDATA[2000 1234 5678 -5678 9012]]></OTLocation>"
+        + "  <OTLocationPath>"
+        + "    <LocationPathString>"
+        + "    Enterprise:Folder 1:Project 1"
+        + "    </LocationPathString>"
+        + "  </OTLocationPath> "
+        + "  <OTName>"
+        + "    Document in Project"
+        + "    <Value lang=\"en\">Document in Project</Value>"
+        + "  </OTName>"
+        + "</SearchResult>"
+        + "</SearchResults>"
+        + "<SearchResultsInformation>"
+        + "  <CurrentStartAt>1</CurrentStartAt>"
+        + "  <NumberResultsThisPage>1</NumberResultsThisPage>"
+        + "</SearchResultsInformation>"
+        + "</Output>";
+
+    HttpServer server = startServer(response, RESPONSE_NO_RESULTS);
+    try {
+      SoapFactoryMock soapFactory = new SoapFactoryMock();
+      OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+      AdaptorContext context = ProxyAdaptorContext.getInstance();
+      Config config = initConfig(adaptor, context);
+      config.overrideKey("opentext.displayUrl.contentServerUrl",
+          "http://127.0.0.1:" + server.getAddress().getPort() + "/");
+      config.overrideKey("opentext.src", "1234");
+      adaptor.init(context);
+
+      // Create the node; note that the test server doesn't
+      // actually search by date, so we can use a fixed date
+      // here and still have it returned.
+      NodeMock node = new NodeMock(9012, "Document in Project", "Document");
+      node.setModifyDate(2013, 3, 1, 4, 34, 21);
+      soapFactory.documentManagementMock.addNode(node);
+      DocIdPusherMock docIdPusherMock = new DocIdPusherMock();
+      adaptor.getModifiedDocIds(
+          Proxies.newProxyInstance(DocIdPusher.class, docIdPusherMock));
+      assertEquals(Lists.newArrayList(
+              new DocId("1234/Project+1/Document+in+Project:9012")),
+          docIdPusherMock.docIds);
+
+      // Check that the adaptor stored the last modified
+      // date/time for the last item in the search results and
+      // uses the stored data the next time the search query is
+      // generated.
+      String query = adaptor.getLastModifiedQuery();
+      assertTrue(query,
+          query.contains("QLREGION+%22OTModifyTime%22%5D+%3E+%22043421%22"));
+      assertTrue(query,
+          query.contains("QLREGION+%22OTModifyDate%22%5D+%3D+%2220130401%22"));
+    } finally {
+      server.stop(0);
+    }
+  }
+
+  private void assertXmlSearchCount(int expectedCount, String response)
+      throws Exception {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    assertEquals(expectedCount,
+        adaptor.getXmlSearchCount(parseXml(response)));
+  }
+
+  private Element parseXml(String source) throws Exception {
+    DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+    DocumentBuilder builder = factory.newDocumentBuilder();
+    return builder.parse(
+        new InputSource(new StringReader(source))).getDocumentElement();
+  }
+
+  private HttpServer startServer(final String... response) throws IOException {
+    HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+    server.createContext("/").setHandler(
+        new HttpHandler() {
+          int responseIndex = 0;
+          public void handle(HttpExchange exchange) throws IOException {
+            byte[] responseBytes;
+            if (responseIndex < response.length) {
+              responseBytes = response[responseIndex].getBytes(UTF_8);
+              responseIndex++;
+            } else {
+              responseBytes = new byte[0];
+            }
+            exchange.sendResponseHeaders(200, responseBytes.length);
+            OutputStream out = exchange.getResponseBody();
+            IOHelper.copyStream(new ByteArrayInputStream(responseBytes), out);
+            exchange.close();
+          }
+        });
+    server.start();
+    return server;
+  }
+
 
   private class SoapFactoryMock implements SoapFactory {
     private DsAuthenticationMock dsAuthenticationMock;

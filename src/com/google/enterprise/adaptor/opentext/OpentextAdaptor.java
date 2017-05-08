@@ -14,10 +14,18 @@
 
 package com.google.enterprise.adaptor.opentext;
 
+import static com.google.common.net.HttpHeaders.COOKIE;
+import static org.w3c.dom.Node.CDATA_SECTION_NODE;
+import static org.w3c.dom.Node.TEXT_NODE;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.escape.Escaper;
+import com.google.common.net.UrlEscapers;
+import com.google.common.primitives.Ints;
+import com.google.common.primitives.Longs;
 import com.google.enterprise.adaptor.AbstractAdaptor;
 import com.google.enterprise.adaptor.Acl;
 import com.google.enterprise.adaptor.AdaptorContext;
@@ -27,6 +35,7 @@ import com.google.enterprise.adaptor.DocIdPusher;
 import com.google.enterprise.adaptor.GroupPrincipal;
 import com.google.enterprise.adaptor.IOHelper;
 import com.google.enterprise.adaptor.InvalidConfigurationException;
+import com.google.enterprise.adaptor.PollingIncrementalLister;
 import com.google.enterprise.adaptor.Principal;
 import com.google.enterprise.adaptor.Request;
 import com.google.enterprise.adaptor.Response;
@@ -84,12 +93,18 @@ import com.opentext.livelink.service.memberservice.SearchMatching;
 import com.opentext.livelink.service.memberservice.SearchScope;
 import com.opentext.livelink.service.memberservice.User;
 
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
+import org.xml.sax.SAXException;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStreamWriter;
 import java.io.UnsupportedEncodingException;
 import java.io.Writer;
 import java.net.URI;
+import java.net.URL;
+import java.net.URLConnection;
 import java.net.URLEncoder;
 import java.nio.charset.Charset;
 import java.text.MessageFormat;
@@ -101,6 +116,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -114,6 +130,10 @@ import java.util.logging.Logger;
 import javax.activation.DataHandler;
 import javax.xml.datatype.XMLGregorianCalendar;
 import javax.xml.namespace.QName;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.FactoryConfigurationError;
+import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.soap.SOAPException;
 import javax.xml.soap.SOAPFactory;
 import javax.xml.soap.SOAPFault;
@@ -123,7 +143,8 @@ import javax.xml.ws.soap.MTOMFeature;
 import javax.xml.ws.soap.SOAPFaultException;
 
 /** For getting OpenText repository content into a Google Search Appliance. */
-public class OpentextAdaptor extends AbstractAdaptor {
+public class OpentextAdaptor extends AbstractAdaptor
+    implements PollingIncrementalLister {
 
   private static final Logger log
       = Logger.getLogger(OpentextAdaptor.class.getName());
@@ -175,6 +196,13 @@ public class OpentextAdaptor extends AbstractAdaptor {
       Collections.synchronizedSortedSet(new TreeSet<String>());
   private Map<String, List<String>> includedNodeFeatures;
   private ThreadLocal<SimpleDateFormat> metadataDateFormatter;
+
+  // Used by getModifiedDocIds
+  private DocumentBuilderFactory documentBuilderFactory;
+  private Long lastModDocId;
+  private String lastModDate;
+  private String lastModTime;
+  private Escaper paramEscaper = UrlEscapers.urlFormParameterEscaper();
 
   /** Possible CWS installation server types. */
   public enum CwsServer {
@@ -488,6 +516,15 @@ public class OpentextAdaptor extends AbstractAdaptor {
             return new SimpleDateFormat(metadataDateFormat);
           }
         };
+
+    try {
+      this.documentBuilderFactory = DocumentBuilderFactory.newInstance();
+      context.setPollingIncrementalLister(this);
+    } catch (FactoryConfigurationError e) {
+      log.log(Level.WARNING,
+          "Unable to create XML parser; modified doc id lookup not enabled.",
+          e);
+    }
   }
 
   private boolean isAuthenticationFailure(String code) {
@@ -673,6 +710,297 @@ public class OpentextAdaptor extends AbstractAdaptor {
     } else {
       return new GroupPrincipal(name, this.localNamespace);
     }
+  }
+
+  @Override
+  public void getModifiedDocIds(DocIdPusher pusher)
+      throws IOException, InterruptedException {
+    // Log in using CWS and use that token for the search.
+    Authentication authentication = this.soapFactory.newAuthentication();
+    String authenticationToken =
+        getAuthenticationToken(this.username, this.password);
+
+    ArrayList<DocId> docIds = new ArrayList<>();
+    int resultCount = 0;
+    do {
+      String query = getLastModifiedQuery();
+      log.log(Level.FINER, "getModifiedDocIds query: {0}", query);
+      Element documentElement =
+          getXmlSearchResults(authenticationToken, query);
+      resultCount = getXmlSearchCount(documentElement);
+      log.log(Level.FINER, "getModifiedDocIds result count: " + resultCount);
+      if (resultCount > 0) {
+        NodeList searchResults =
+            documentElement.getElementsByTagName("SearchResult");
+        for (int i = 0; i < searchResults.getLength(); i++) {
+          String docId = getXmlSearchDocId((Element) searchResults.item(i));
+          if (docId != null) {
+            docIds.add(new DocId(docId));
+          }
+        }
+        // Cache the last object's id/date/time
+        if (docIds.size() > 0) {
+          Long nodeId = Longs.tryParse(
+              docIds.get(docIds.size() - 1).getUniqueId().split(":")[1]);
+          DocumentManagement documentManagement =
+              this.soapFactory.newDocumentManagement(authenticationToken);
+          Node node = getNodeById(documentManagement, nodeId);
+          if (node != null) {
+            XMLGregorianCalendar xmlCalendar = node.getModifyDate();
+            if (xmlCalendar != null) {
+              Date date = xmlCalendar.toGregorianCalendar().getTime();
+              this.lastModDocId = nodeId;
+              this.lastModDate = new SimpleDateFormat("yyyyMMdd").format(date);
+              this.lastModTime = new SimpleDateFormat("HHmmss").format(date);
+            }
+          }
+        }
+      }
+    } while (resultCount > 0);
+    log.log(Level.FINER, "Sending modified doc ids: {0}", docIds);
+    pusher.pushDocIds(docIds);
+  }
+
+  /* Reads a SearchResult element from Content Server's XML
+   * search results and builds a DocId by pulling various parts
+   * from the SearchResult, including the names and ids of parent
+   * elements and the result item itself. The DocId has the
+   * form "<start point id>/<name>/<name>/<name>:<object id>".
+   *
+   * An example SearchResult element showing only the elements
+   * used to construct the DocId:
+   *
+   * <SearchResult>
+   *   <OTLocation><![CDATA[2000 1234 5678 -5678 9012]]></OTLocation>
+   *   <OTLocationPath>
+   *     <LocationPathString>
+   *     Enterprise:Folder 1:Project 1
+   *     </LocationPathString>
+   *   </OTLocationPath>
+   *   <OTName>
+   *     Document in Project
+   *     <Value lang="en">Document in Project</Value>
+   *   </OTName>
+   * </SearchResult>
+   */
+  @VisibleForTesting
+  String getXmlSearchDocId(Element resultElement) {
+    // Get the list of ids defining the path to the search result
+    // item from the OTLocation element.
+    List<String> originalIds = new ArrayList<>(
+        Splitter.on(" ").omitEmptyStrings().trimResults()
+        .splitToList(getTextContent(resultElement, "OTLocation")));
+    List<String> ids = getXmlSearchIds(resultElement);
+    if (ids.size() == 0) {
+      log.log(Level.FINE,
+          "Skipping search result with no id path found in OTLocation: {0}",
+          originalIds);
+      return null;
+    }
+
+    // OTLocation includes the search result item's id as the
+    // final element. The corresponding list of names doesn't
+    // include the search result item, so remove the item id to
+    // make the lists parallel.
+    String objectId = ids.remove(ids.size() - 1);
+
+    // Look through the StartPoint list. If the result item is a
+    // start point, return its id. Otherwise, find the index of a
+    // start point in the id path.
+    StartPoint startPoint = null;
+    int startPointIndex = -1;
+    for (StartPoint sp : this.startPoints) {
+      String startPointId = String.valueOf(sp.getNodeId());
+      if (startPointId.equals(objectId)) {
+        return escapeParam(sp.getName()) + ":" + startPointId;
+      } else {
+        startPointIndex = ids.indexOf(startPointId);
+        if (startPointIndex > -1) {
+          startPoint = sp;
+          break;
+        }
+      }
+    }
+    // If the result item is not contained under a configured
+    // start point, skip it.
+    if (startPointIndex == -1) {
+      log.log(Level.FINE,
+          "No start point in path; skipping: {0}", originalIds);
+      return null;
+    }
+
+    // Get the list of names defining the path to the search result
+    // item from the LocationPathString element.
+    List<String> names = getXmlSearchNames(resultElement);
+    if (names.size() != ids.size()) {
+      log.log(Level.FINE,
+          "Mismatch in names/ids in search results; skipping: {0} {1}",
+          new Object[] { names, originalIds });
+      return null;
+    }
+
+    // The first element in the doc id is the start point; use
+    // the value from the config file.
+    StringBuilder docId = new StringBuilder();
+    docId.append(escapeParam(startPoint.getName()));
+    for (int i = startPointIndex + 1; i < names.size(); i++) {
+      docId.append("/").append(escapeParam(names.get(i)));
+    }
+    docId.append("/")
+        .append(paramEscaper.escape(getTextContent(resultElement, "OTName")))
+        .append(":")
+        .append(objectId);
+
+    return docId.toString();
+  }
+
+  /* LocationPathString contains a ':' separated list of object
+   * names, not including the name of the search result object.
+   * Example:
+   * <LocationPathString>Enterprise:Folder 1:Project 1</LocationPathString>
+   */
+  @VisibleForTesting
+  List<String> getXmlSearchNames(Element resultElement) {
+    return Splitter.on(":").trimResults().omitEmptyStrings()
+        .splitToList(getTextContent(resultElement, "LocationPathString"));
+  }
+
+  /* OTLocation contains a list of object ids, starting from the
+   * root, defining the path to (and including) the search result object.
+   * Example:
+   * <OTLocation><![CDATA[2000 1234 5678 -5678 9012]]></OTLocation>
+   *
+   * This method returns a modifiable list.
+   */
+  @VisibleForTesting
+  List<String> getXmlSearchIds(Element resultElement) {
+    List<String> ids = new ArrayList<>(
+        Splitter.on(" ").omitEmptyStrings().trimResults()
+        .splitToList(getTextContent(resultElement, "OTLocation")));
+    if (ids.size() == 0) {
+      return ids;
+    }
+    ListIterator<String> iterator = ids.listIterator();
+    while (iterator.hasNext()) {
+      String id = iterator.next();
+      Long idn = Longs.tryParse(id);
+      if (idn == null) {
+        log.log(Level.FINER, "Invalid id '{0}' in id list {1}; skipping",
+            new Object[] {id, ids});
+        return Collections.emptyList();
+      } else if (idn < 0) {
+        iterator.remove(); // Remove volume ids, e.g. Projects.
+      }
+    }
+    return ids;
+  }
+
+  /* Results are returned in SearchResult elements, but
+   * when there are no results, we get a single SearchResult
+   * element containing a text message ("Sorry, no results
+   * were found", for example). Check the count instead to
+   * see if there are actual results in this response.
+   */
+  @VisibleForTesting
+  int getXmlSearchCount(Element documentElement) {
+    String countText =
+        getTextContent(documentElement, "NumberResultsThisPage");
+    Integer count = Ints.tryParse(countText);
+    if (count != null) {
+      return count;
+    }
+    return 0;
+  }
+
+  @VisibleForTesting
+  Element getXmlSearchResults(String authenticationToken, String query)
+      throws IOException {
+    URL url = new URL(this.contentServerUrl + "?" + query);
+    URLConnection conn = url.openConnection();
+    conn.addRequestProperty(COOKIE, "LLCookie=" + authenticationToken);
+    try {
+      DocumentBuilder builder =
+          this.documentBuilderFactory.newDocumentBuilder();
+      try (InputStream in = conn.getInputStream()) {
+        return builder.parse(in).getDocumentElement();
+      }
+    } catch (ParserConfigurationException | SAXException e) {
+      throw new IOException("Failed to get search results", e);
+    }
+  }
+
+  /* Helper to read the text content of a node, excluding element
+   * children. Some search result elements contain the value
+   * we're interested in as text/pcdata plus one or more Value
+   * child elements containing multilingual variants of the data.
+   */
+  private String getTextContent(
+      Element container, String contentElementName) {
+    NodeList list = container.getElementsByTagName(contentElementName);
+    if (list.getLength() != 1) {
+      log.log(Level.FINE,
+          "Missing/unexpected values for {0}", contentElementName);
+      return "";
+    }
+    StringBuilder stringBuilder = new StringBuilder();
+    NodeList children = list.item(0).getChildNodes();
+    for (int i = 0; i < children.getLength(); i++) {
+      org.w3c.dom.Node child = children.item(i);
+      if (child.getNodeType() == CDATA_SECTION_NODE
+          || child.getNodeType() == TEXT_NODE) {
+        String content = child.getTextContent().trim();
+        if (content.length() > 0) {
+          stringBuilder.append(content).append(" ");
+        }
+      }
+    }
+    if (stringBuilder.length() > 0) {
+      stringBuilder.deleteCharAt(stringBuilder.length() - 1);
+    }
+    return stringBuilder.toString();
+  }
+
+  @VisibleForTesting
+  String getLastModifiedQuery() {
+    StringBuilder query = new StringBuilder();
+    query.append("func=search&outputFormat=xml&findSimilar=false")
+        .append("&functionMenu=false&hhTerms=false&hitHightlight=false")
+        .append("&sortByRegion=OTModifyDate&sortDirection=asc")
+        .append("&startAt=1&goFor=100");
+    for (int i = 0; i < this.startPoints.size(); i++) {
+      query.append("&Location_ID").append(i + 1).append("=")
+          .append(this.startPoints.get(i).getNodeId());
+    }
+    if (this.lastModDate == null) {
+      // Search within last day.
+      SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMdd");
+      this.lastModDate = dateFormat.format(
+          new Date(System.currentTimeMillis() - ONE_DAY_MILLIS));
+      this.lastModTime = "000000";
+    }
+    query.append("&where1=")
+        .append(
+            escapeParam("[QLREGION \"OTModifyDate\"] = \"{0}\"",
+                this.lastModDate))
+        .append("&boolean2=AND")
+        .append("&where2=")
+        .append(
+            escapeParam("[QLREGION \"OTModifyTime\"] > \"{0}\"",
+                this.lastModTime))
+        .append("&boolean3=OR")
+        .append("&where3=")
+        .append(
+            escapeParam("[QLREGION \"OTModifyDate\"] > \"{0}\"",
+                this.lastModDate));
+    return query.toString();
+  }
+
+  private String escapeParam(String param, String... values) {
+    if (values.length == 0) {
+      return paramEscaper.escape(param);
+    }
+    return paramEscaper.escape(
+        MessageFormat.format(param, (Object[]) values));
   }
 
   /** Gives the bytes of a document referenced with id. */
@@ -947,21 +1275,32 @@ public class OpentextAdaptor extends AbstractAdaptor {
     responseWriter.finish();
   }
 
+  private Node getNodeById(DocumentManagement documentManagement, long id) {
+    // Use the object id to look up the node.
+    Node node;
+    try {
+      node = documentManagement.getNode(id);
+      if (node == null) {
+        log.log(Level.FINER, "No item for id: " + id);
+        return null;
+      }
+    } catch (SOAPFaultException soapFaultException) {
+      log.log(Level.WARNING, "Error retrieving item: " + id,
+          soapFaultException);
+      return null;
+    }
+    return node;
+  }
+
   @VisibleForTesting
   Node getNode(DocumentManagement documentManagement,
       OpentextDocId opentextDocId) {
     log.log(Level.FINER, "Looking up docId: " + opentextDocId);
 
     // Use the object id to look up the node.
-    Node node;
-    try {
-      node = documentManagement.getNode(opentextDocId.getNodeId());
-      if (node == null) {
-        return null;
-      }
-    } catch (SOAPFaultException soapFaultException) {
-      log.log(Level.WARNING, "Error retrieving item: " + opentextDocId,
-          soapFaultException);
+    Node node = getNodeById(documentManagement, opentextDocId.getNodeId());
+    if (node == null) {
+      log.log(Level.FINER, "No item for id: " + opentextDocId);
       return null;
     }
 

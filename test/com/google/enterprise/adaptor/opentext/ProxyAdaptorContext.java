@@ -18,6 +18,7 @@ import com.google.enterprise.adaptor.AdaptorContext;
 import com.google.enterprise.adaptor.Config;
 import com.google.enterprise.adaptor.DocId;
 import com.google.enterprise.adaptor.DocIdEncoder;
+import com.google.enterprise.adaptor.PollingIncrementalLister;
 import com.google.enterprise.adaptor.SensitiveValueDecoder;
 
 import java.net.URI;
@@ -49,6 +50,9 @@ class ProxyAdaptorContext {
           return URI.create(docId.getUniqueId());
         }
       };
+    }
+
+    public void setPollingIncrementalLister(PollingIncrementalLister lister) {
     }
   }
 }
