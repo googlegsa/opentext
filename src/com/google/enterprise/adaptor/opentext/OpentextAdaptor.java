@@ -22,6 +22,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.google.common.escape.Escaper;
 import com.google.common.net.UrlEscapers;
 import com.google.common.primitives.Ints;
@@ -103,6 +104,7 @@ import java.io.OutputStreamWriter;
 import java.io.UnsupportedEncodingException;
 import java.io.Writer;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.net.URLEncoder;
@@ -397,6 +399,24 @@ public class OpentextAdaptor extends AbstractAdaptor
         this.queryStrings);
     log.log(Level.CONFIG, "opentext.displayUrl.objAction: {0}",
         this.objectActions);
+    // Validate the display URLs.
+    try {
+      // First try the default queryString and objectAction.
+      URI uri = getDisplayUrl("default", 0L);
+      new ValidatedUri(uri.toString()).logUnreachableHost();
+    } catch (URISyntaxException e) {
+      throw new InvalidConfigurationException("Invalid display URL", e);
+    }
+    // Now try the display URLs for specific object types.
+    for (String objectType :
+         Sets.union(queryStrings.keySet(), objectActions.keySet())) {
+      try {
+        getDisplayUrl(objectType, 0L);
+      } catch (URISyntaxException e) {
+        throw new InvalidConfigurationException(
+            "Invalid display URL for object type " + objectType, e);
+      }
+    }
 
     if (!this.markAllDocsAsPublic) {
       String publicAccessGroupEnabled =
@@ -1049,7 +1069,13 @@ public class OpentextAdaptor extends AbstractAdaptor
     doCategories(documentManagement, node, resp);
     doNodeFeatures(node, resp);
     doNodeProperties(documentManagement, node, resp);
-    resp.setDisplayUrl(getDisplayUrl(node.getType(), node.getID()));
+    try {
+      resp.setDisplayUrl(getDisplayUrl(node.getType(), node.getID()));
+    } catch (URISyntaxException e) {
+      // This should have been caught in init(), what went wrong here?
+      throw new IOException("Invalid display URL for object ID "
+          + node.getID() + " of type " + node.getType(), e);
+    }
     switch (node.getType()) {
       case "Collection":
         doCollection(documentManagement, opentextDocId, node, resp);
@@ -1462,7 +1488,8 @@ public class OpentextAdaptor extends AbstractAdaptor
   }
 
   @VisibleForTesting
-  URI getDisplayUrl(String objectType, long objectId) {
+  URI getDisplayUrl(String objectType, long objectId)
+      throws URISyntaxException {
     String queryString = this.queryStrings.get(objectType);
     if (queryString == null) {
       queryString = this.queryStrings.get("default");
@@ -1474,7 +1501,7 @@ public class OpentextAdaptor extends AbstractAdaptor
     StringBuilder builder = new StringBuilder(this.contentServerUrl);
     builder.append(MessageFormat.format(queryString, objectAction,
             Long.toString(objectId)));
-    return URI.create(builder.toString());
+    return new ValidatedUri(builder.toString()).getUri();
   }
 
   @VisibleForTesting

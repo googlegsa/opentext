@@ -132,7 +132,7 @@ public class OpentextAdaptorTest {
   /** The namespaces when this test's initConfig helper is used. */
   private static final String GLOBAL_NAMESPACE = "globalnamespace";
   private static final String LOCAL_NAMESPACE =
-      GLOBAL_NAMESPACE + "_example-com";
+      GLOBAL_NAMESPACE + "_localhost";
 
   private static final String RESPONSE_NO_RESULTS =
       "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
@@ -731,7 +731,7 @@ public class OpentextAdaptorTest {
     Request request = Proxies.newProxyInstance(Request.class,
         requestMock);
     adaptor.getDocContent(request, response);
-    assertEquals("http://example.com/otcs/livelink.exe"
+    assertEquals("http://localhost/otcs/livelink.exe"
         + "?func=ll&objAction=properties&objId=3143",
         responseMock.displayUrl.toString());
     assertFalse(responseMock.noIndex);
@@ -765,7 +765,7 @@ public class OpentextAdaptorTest {
     Request request = Proxies.newProxyInstance(Request.class,
         requestMock);
     adaptor.getDocContent(request, response);
-    assertEquals("http://example.com/otcs/livelink.exe"
+    assertEquals("http://localhost/otcs/livelink.exe"
         + "?func=ll&objAction=properties&objId=3143",
         responseMock.displayUrl.toString());
     assertTrue(responseMock.noIndex);
@@ -885,7 +885,42 @@ public class OpentextAdaptorTest {
   }
 
   @Test
-  public void testGetDisplayUrl() {
+  public void testInvalidDisplayUrlBadServerUrl() throws Exception {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.displayUrl.contentServerUrl",
+        "http://invalid_host_name/foo/bar");
+    thrown.expect(InvalidConfigurationException.class);
+    adaptor.init(context);
+  }
+
+  @Test
+  public void testInvalidDisplayUrlBadQueryString() throws Exception {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.addKey("opentext.displayUrl.queryString.bad",
+        "?func=ll&objAction={0}&objId={1}&invalid={2}");
+    thrown.expect(InvalidConfigurationException.class);
+    adaptor.init(context);
+  }
+
+  @Test
+  public void testInvalidDisplayUrlBadObjectAction() throws Exception {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.addKey("opentext.displayUrl.objAction.bad", "invalid{?}action");
+    thrown.expect(InvalidConfigurationException.class);
+    adaptor.init(context);
+  }
+
+  @Test
+  public void testGetDisplayUrl() throws Exception {
     SoapFactoryMock soapFactory = new SoapFactoryMock();
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
     AdaptorContext context = ProxyAdaptorContext.getInstance();
@@ -894,20 +929,20 @@ public class OpentextAdaptorTest {
     adaptor.init(context);
 
     URI displayUrl = adaptor.getDisplayUrl("Document", 12345);
-    assertEquals("http://example.com/otcs/livelink.exe"
+    assertEquals("http://localhost/otcs/livelink.exe"
         + "?func=ll&objAction=overview&objId=12345", displayUrl.toString());
 
     displayUrl = adaptor.getDisplayUrl("UnknownType", 12345);
-    assertEquals("http://example.com/otcs/livelink.exe"
+    assertEquals("http://localhost/otcs/livelink.exe"
         + "?func=ll&objAction=properties&objId=12345", displayUrl.toString());
 
     displayUrl = adaptor.getDisplayUrl("GenericNode:111", 12345);
-    assertEquals("http://example.com/otcs/livelink.exe"
+    assertEquals("http://localhost/otcs/livelink.exe"
         + "?func=ll&objAction=actionFor111&objId=12345", displayUrl.toString());
   }
 
   @Test
-  public void testGetDisplayUrlPathInfo() {
+  public void testGetDisplayUrlPathInfo() throws Exception {
     SoapFactoryMock soapFactory = new SoapFactoryMock();
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
     AdaptorContext context = ProxyAdaptorContext.getInstance();
@@ -919,10 +954,10 @@ public class OpentextAdaptorTest {
     adaptor.init(context);
 
     URI displayUrl = adaptor.getDisplayUrl("Document", 12345);
-    assertEquals("http://example.com/otcs/livelink.exe/open/12345",
+    assertEquals("http://localhost/otcs/livelink.exe/open/12345",
         displayUrl.toString());
     displayUrl = adaptor.getDisplayUrl("GenericNode:111", 12345);
-    assertEquals("http://example.com/otcs/livelink.exe/open111/12345",
+    assertEquals("http://localhost/otcs/livelink.exe/open111/12345",
         displayUrl.toString());
   }
 
@@ -4428,7 +4463,7 @@ public class OpentextAdaptorTest {
     config.overrideKey("opentext.webServicesUrl",
         "http://example.com/les-services/services");
     config.overrideKey("opentext.displayUrl.contentServerUrl",
-        "http://example.com/otcs/livelink.exe");
+        "http://localhost/otcs/livelink.exe");
     config.overrideKey("adaptor.namespace", GLOBAL_NAMESPACE);
     return config;
   }
