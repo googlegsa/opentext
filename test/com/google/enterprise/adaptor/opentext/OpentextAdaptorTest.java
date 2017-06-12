@@ -993,7 +993,7 @@ public class OpentextAdaptorTest {
   }
 
   @Test
-  public void testDoDocument() throws IOException {
+  public void testDoDocumentCws() throws IOException {
     DocId docId = new DocId("2000/Document:3143");
     OpentextDocId testDocId = new OpentextDocId(docId);
     SoapFactoryMock soapFactory = new SoapFactoryMock();
@@ -1006,6 +1006,7 @@ public class OpentextAdaptorTest {
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.indexing.downloadMethod", "webservices");
     adaptor.init(context);
 
     RequestMock requestMock = new RequestMock(docId);
@@ -1022,6 +1023,89 @@ public class OpentextAdaptorTest {
     assertEquals("text/plain", responseMock.contentType);
     assertEquals("this is the content",
         responseMock.outputStream.toString("UTF-8"));
+  }
+
+  @Test
+  public void testDoDocumentContentServer() throws IOException {
+    DocId docId = new DocId("2000/Document:3143");
+    OpentextDocId testDocId = new OpentextDocId(docId);
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    NodeMock documentNode =
+        new NodeMock(3143, "Title of Document", "Document");
+    documentNode.setVersion(1, "text/plain",
+        new GregorianCalendar(2015, 1, 3, 9, 42, 42));
+    soapFactory.documentManagementMock.addNode(documentNode);
+
+    HttpServer server = startServer("this is the web-based content");
+    try {
+      OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+      AdaptorContext context = ProxyAdaptorContext.getInstance();
+      Config config = initConfig(adaptor, context);
+      config.overrideKey("opentext.indexing.downloadMethod", "contentserver");
+      config.overrideKey("opentext.indexing.contentServerUrl",
+          "http://127.0.0.1:" + server.getAddress().getPort() + "/");
+
+      adaptor.init(context);
+
+      RequestMock requestMock = new RequestMock(docId);
+      Request request = Proxies.newProxyInstance(Request.class, requestMock);
+      ResponseMock responseMock = new ResponseMock();
+      Response response = Proxies.newProxyInstance(Response.class,
+          responseMock);
+
+      DocumentManagement documentManagement =
+          soapFactory.newDocumentManagement("token");
+      adaptor.doDocument(documentManagement, testDocId,
+          documentNode, request, response);
+
+      assertEquals("text/plain", responseMock.contentType);
+      assertEquals("this is the web-based content",
+          responseMock.outputStream.toString("UTF-8"));
+    } finally {
+      server.stop(0);
+    }
+  }
+
+  @Test
+  public void testDoDocumentContentHandler() throws IOException {
+    DocId docId = new DocId("2000/Document:3143");
+    OpentextDocId testDocId = new OpentextDocId(docId);
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    NodeMock documentNode =
+        new NodeMock(3143, "Title of Document", "Document");
+    documentNode.setVersion(1, "text/plain",
+        new GregorianCalendar(2015, 1, 3, 9, 42, 42));
+    soapFactory.documentManagementMock.addNode(documentNode);
+
+    HttpServer server = startServer("this is the handler content");
+    try {
+      OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+      AdaptorContext context = ProxyAdaptorContext.getInstance();
+      Config config = initConfig(adaptor, context);
+      config.overrideKey("opentext.indexing.downloadMethod",
+          "contenthandler");
+      config.overrideKey("opentext.indexing.contentHandlerUrl",
+          "http://127.0.0.1:" + server.getAddress().getPort() + "/");
+
+      adaptor.init(context);
+
+      RequestMock requestMock = new RequestMock(docId);
+      Request request = Proxies.newProxyInstance(Request.class, requestMock);
+      ResponseMock responseMock = new ResponseMock();
+      Response response = Proxies.newProxyInstance(Response.class,
+          responseMock);
+
+      DocumentManagement documentManagement =
+          soapFactory.newDocumentManagement("token");
+      adaptor.doDocument(documentManagement, testDocId,
+          documentNode, request, response);
+
+      assertEquals("text/plain", responseMock.contentType);
+      assertEquals("this is the handler content",
+          responseMock.outputStream.toString("UTF-8"));
+    } finally {
+      server.stop(0);
+    }
   }
 
   @Test
@@ -3067,6 +3151,7 @@ public class OpentextAdaptorTest {
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.indexing.downloadMethod", "webservices");
     adaptor.init(context);
 
     DocId docId = new DocId("2000/Email Message:3143");
@@ -3716,6 +3801,12 @@ public class OpentextAdaptorTest {
 
     @Override
     public void setServer(OpentextAdaptor.CwsServer server) {
+    }
+
+    @Override
+    public String getAuthenticationToken(
+        DocumentManagement documentManagement) {
+      return "token";
     }
   }
 

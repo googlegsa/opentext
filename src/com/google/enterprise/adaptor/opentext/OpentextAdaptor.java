@@ -15,6 +15,7 @@
 package com.google.enterprise.adaptor.opentext;
 
 import static com.google.common.net.HttpHeaders.COOKIE;
+import static java.util.Locale.ENGLISH;
 import static org.w3c.dom.Node.CDATA_SECTION_NODE;
 import static org.w3c.dom.Node.TEXT_NODE;
 
@@ -119,7 +120,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.ListIterator;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
@@ -172,6 +172,11 @@ public class OpentextAdaptor extends AbstractAdaptor
   /** Configured start points, with unknown values removed. */
   private List<StartPoint> startPoints;
   private String contentServerUrl;
+  private String indexingContentServerUrl;
+  private int readTimeout;
+  private int connectTimeout;
+  private DownloadMethod downloadMethod;
+  private String contentHandlerUrl;
   private Map<String, String> queryStrings;
   private Map<String, String> objectActions;
   private List<String> excludedNodeTypes;
@@ -211,6 +216,10 @@ public class OpentextAdaptor extends AbstractAdaptor
     IIS, TOMCAT
   }
 
+  enum DownloadMethod {
+    CONTENTHANDLER, CONTENTSERVER, WEBSERVICES
+  }
+
   public OpentextAdaptor() {
     this(new SoapFactoryImpl());
   }
@@ -239,6 +248,10 @@ public class OpentextAdaptor extends AbstractAdaptor
         "?func=ll&objAction={0}&objId={1}");
     config.addKey("opentext.displayUrl.objAction.Document", "overview");
     config.addKey("opentext.displayUrl.objAction.default", "properties");
+    config.addKey("opentext.indexing.contentServerUrl", "");
+    config.addKey("opentext.indexing.downloadMethod",
+        DownloadMethod.CONTENTSERVER.name());
+    config.addKey("opentext.indexing.contentHandlerUrl", "");
     config.addKey("opentext.excludedNodeTypes", "");
     config.addKey("opentext.excludedNodeTypes.separator", ",");
     config.addKey("opentext.indexFolders", "true");
@@ -415,6 +428,61 @@ public class OpentextAdaptor extends AbstractAdaptor
       } catch (URISyntaxException e) {
         throw new InvalidConfigurationException(
             "Invalid display URL for object type " + objectType, e);
+      }
+    }
+
+    // This URL is used for search and download.
+    this.indexingContentServerUrl =
+        config.getValue("opentext.indexing.contentServerUrl");
+    if (this.indexingContentServerUrl.isEmpty()) {
+      this.indexingContentServerUrl = this.contentServerUrl;
+    }
+    log.log(Level.CONFIG, "opentext.indexing.contentServerUrl: {0}",
+        this.indexingContentServerUrl);
+
+    try {
+      this.readTimeout = Integer.parseInt(
+          config.getValue("adaptor.docContentTimeoutSecs")) * 1000;
+    } catch (NumberFormatException e) {
+      throw new InvalidConfigurationException(
+          "Invalid value for adaptor.docContentTimeoutSecs: "
+          + config.getValue("adaptor.docContentTimeoutSecs"));
+    }
+    try {
+      this.connectTimeout = Integer.parseInt(
+          config.getValue("adaptor.docHeaderTimeoutSecs")) * 1000;
+    } catch (NumberFormatException e) {
+      throw new InvalidConfigurationException(
+          "Invalid value for adaptor.docHeaderTimeoutSecs: "
+          + config.getValue("adaptor.docHeaderTimeoutSecs"));
+    }
+
+    try {
+      this.downloadMethod = Enum.valueOf(DownloadMethod.class,
+          config.getValue("opentext.indexing.downloadMethod")
+          .toUpperCase(ENGLISH));
+    } catch (IllegalArgumentException e) {
+      throw new InvalidConfigurationException(
+          "Invalid value '"
+          + config.getValue("opentext.indexing.downloadMethod")
+          + "' for opentext.indexing.downloadMethod; valid values are "
+          + Arrays.toString(DownloadMethod.values()).toLowerCase(ENGLISH));
+    }
+    // Don't log these parameters unless they're set to something
+    // other than the default.
+    if (this.downloadMethod != DownloadMethod.CONTENTSERVER) {
+      log.log(Level.CONFIG, "opentext.indexing.downloadMethod: {0}",
+          this.downloadMethod.name().toLowerCase(ENGLISH));
+      if (this.downloadMethod == DownloadMethod.CONTENTHANDLER) {
+        this.contentHandlerUrl =
+            config.getValue("opentext.indexing.contentHandlerUrl");
+        if (this.contentHandlerUrl.isEmpty()) {
+          throw new InvalidConfigurationException(
+              "opentext.indexing.contentHandlerUrl is missing");
+        } else {
+          log.log(Level.CONFIG, "opentext.indexing.contentHandlerUrl: {0}",
+              this.contentHandlerUrl);
+        }
       }
     }
 
@@ -935,9 +1003,11 @@ public class OpentextAdaptor extends AbstractAdaptor
   @VisibleForTesting
   Element getXmlSearchResults(String authenticationToken, String query)
       throws IOException {
-    URL url = new URL(this.contentServerUrl + "?" + query);
+    URL url = new URL(this.indexingContentServerUrl + "?" + query);
     URLConnection conn = url.openConnection();
     conn.addRequestProperty(COOKIE, "LLCookie=" + authenticationToken);
+    conn.setConnectTimeout(this.connectTimeout);
+    conn.setReadTimeout(this.readTimeout);
     try {
       DocumentBuilder builder =
           this.documentBuilderFactory.newDocumentBuilder();
@@ -1290,7 +1360,7 @@ public class OpentextAdaptor extends AbstractAdaptor
     Writer writer = new OutputStreamWriter(response.getOutputStream(),
         CHARSET);
     HtmlResponseWriter responseWriter = new HtmlResponseWriter(
-        writer, this.context.getDocIdEncoder(), Locale.ENGLISH);
+        writer, this.context.getDocIdEncoder(), ENGLISH);
     responseWriter.start(opentextDocId.getDocId(),
         opentextDocId.getDocId().getUniqueId());
     for (Node node : containerContents) {
@@ -1460,30 +1530,70 @@ public class OpentextAdaptor extends AbstractAdaptor
             new Object[] { opentextDocId, fileDataSize });
         return;
     }
-    long versionNumber = version.getNumber();
-    String contextId = documentManagement.getVersionContentsContext(
-        documentNode.getID(), versionNumber);
-    ContentService contentService =
-        this.soapFactory.newContentService(documentManagement);
-    DataHandler dataHandler = contentService.downloadContent(contextId);
-
     String contentType = version.getMimeType();
     if (contentType != null) {
       response.setContentType(contentType);
     }
-    InputStream inputStream = dataHandler.getInputStream();
-    try {
-      if (inputStream != null) {
-        IOHelper.copyStream(inputStream, response.getOutputStream());
-      }
-    } finally {
-      if (inputStream != null) {
-        try {
-          inputStream.close();
-        } catch (IOException ioException) {
-          log.log(Level.FINE, "Error closing document stream", ioException);
+
+    switch (this.downloadMethod) {
+      case WEBSERVICES: {
+        log.log(Level.FINEST, "Downloading content from CWS");
+        long versionNumber = version.getNumber();
+        String contextId = documentManagement.getVersionContentsContext(
+            documentNode.getID(), versionNumber);
+        ContentService contentService =
+            this.soapFactory.newContentService(documentManagement);
+        DataHandler dataHandler = contentService.downloadContent(contextId);
+        try (InputStream inputStream = dataHandler.getInputStream()) {
+          if (inputStream != null) {
+            IOHelper.copyStream(inputStream, response.getOutputStream());
+          }
         }
+        break;
       }
+
+      case CONTENTHANDLER: {
+        log.log(Level.FINEST, "Downloading content from {0}",
+            this.contentHandlerUrl);
+        long versionNumber = version.getNumber();
+        String contextId = documentManagement.getVersionContentsContext(
+            documentNode.getID(), versionNumber);
+        String urlString = this.contentHandlerUrl + "?token="
+            +  escapeParam(this.soapFactory.getAuthenticationToken(
+                    documentManagement))
+            + "&contextID=" + escapeParam(contextId);
+        sendUrlResponse(response, urlString);
+        break;
+      }
+
+      case CONTENTSERVER: {
+        String urlString = this.indexingContentServerUrl
+            + "?func=ll&objAction=download&objId=" + documentNode.getID();
+        log.log(Level.FINEST, "Downloading content from {0}",
+            urlString);
+        sendUrlResponse(response, urlString,
+            this.soapFactory.getAuthenticationToken(documentManagement));
+        break;
+      }
+
+    }
+  }
+
+  private void sendUrlResponse(Response response, String urlString)
+      throws IOException {
+    sendUrlResponse(response, urlString, null);
+  }
+
+  private void sendUrlResponse(Response response,
+      String urlString, String llCookie) throws IOException {
+    URLConnection conn = new URL(urlString).openConnection();
+    if (llCookie != null) {
+      conn.addRequestProperty(COOKIE, "LLCookie=" + llCookie);
+    }
+    conn.setConnectTimeout(this.connectTimeout);
+    conn.setReadTimeout(this.readTimeout);
+    try (InputStream in = conn.getInputStream()) {
+      IOHelper.copyStream(in, response.getOutputStream());
     }
   }
 
@@ -2292,6 +2402,7 @@ public class OpentextAdaptor extends AbstractAdaptor
     Collaboration newCollaboration(DocumentManagement documentManagement);
     void configure(Config config);
     void setServer(CwsServer type);
+    String getAuthenticationToken(DocumentManagement documentManagement);
   }
 
   @VisibleForTesting
@@ -2305,6 +2416,8 @@ public class OpentextAdaptor extends AbstractAdaptor
     private String directoryServicesUrl;
     private String webServicesUrl;
     private boolean iis;
+    private int readTimeout;
+    private int connectTimeout;
 
     SoapFactoryImpl() {
       this.dsAuthenticationService = new AuthenticationService(
@@ -2353,6 +2466,7 @@ public class OpentextAdaptor extends AbstractAdaptor
 
       setEndpointAddress(
           (BindingProvider) authenticationPort, "Authentication");
+      addSocketTimeoutConfiguration((BindingProvider) authenticationPort);
 
       return authenticationPort;
     }
@@ -2367,6 +2481,7 @@ public class OpentextAdaptor extends AbstractAdaptor
           (BindingProvider) documentManagementPort, "DocumentManagement");
       setAuthenticationHandler(
           (BindingProvider) documentManagementPort, authenticationToken);
+      addSocketTimeoutConfiguration((BindingProvider) documentManagementPort);
 
       return documentManagementPort;
     }
@@ -2383,6 +2498,7 @@ public class OpentextAdaptor extends AbstractAdaptor
       setAuthenticationHandler(
           (BindingProvider) contentServicePort,
           getAuthenticationToken((BindingProvider) documentManagement));
+      addSocketTimeoutConfiguration((BindingProvider) contentServicePort);
 
       return contentServicePort;
     }
@@ -2398,6 +2514,7 @@ public class OpentextAdaptor extends AbstractAdaptor
       setAuthenticationHandler(
           (BindingProvider) memberServicePort,
           getAuthenticationToken((BindingProvider) documentManagement));
+      addSocketTimeoutConfiguration((BindingProvider) memberServicePort);
 
       return memberServicePort;
     }
@@ -2413,6 +2530,7 @@ public class OpentextAdaptor extends AbstractAdaptor
       setAuthenticationHandler(
           (BindingProvider) collaborationPort,
           getAuthenticationToken((BindingProvider) documentManagement));
+      addSocketTimeoutConfiguration((BindingProvider) collaborationPort);
 
       return collaborationPort;
     }
@@ -2423,6 +2541,13 @@ public class OpentextAdaptor extends AbstractAdaptor
           BindingProvider.ENDPOINT_ADDRESS_PROPERTY,
           getWebServiceAddress(serviceName));
     }
+
+    @Override
+    public String getAuthenticationToken(
+        DocumentManagement documentManagement) {
+      return getAuthenticationToken((BindingProvider) documentManagement);
+    }
+
 
     private String getAuthenticationToken(BindingProvider bindingProvider) {
       List<Handler> chain = bindingProvider.getBinding().getHandlerChain();
@@ -2441,6 +2566,18 @@ public class OpentextAdaptor extends AbstractAdaptor
       bindingProvider.getBinding().setHandlerChain(chain);
     }
 
+    private void addSocketTimeoutConfiguration(
+        BindingProvider bindingProvider) {
+      bindingProvider.getRequestContext().put(
+          "com.sun.xml.internal.ws.connect.timeout", connectTimeout);
+      bindingProvider.getRequestContext().put(
+          "com.sun.xml.internal.ws.request.timeout", readTimeout);
+      bindingProvider.getRequestContext().put(
+          "com.sun.xml.ws.connect.timeout", connectTimeout);
+      bindingProvider.getRequestContext().put(
+          "com.sun.xml.ws.request.timeout", readTimeout);
+    }
+
     @Override
     public void configure(Config config) {
       this.directoryServicesUrl =
@@ -2456,6 +2593,24 @@ public class OpentextAdaptor extends AbstractAdaptor
         this.iis = true;
       } else {
         this.iis = CwsServer.IIS.name().equalsIgnoreCase(server);
+      }
+      // Parameter parsing is duplicated here to avoid entirely
+      // restructuring init().
+      try {
+        this.readTimeout = Integer.parseInt(
+            config.getValue("adaptor.docContentTimeoutSecs")) * 1000;
+      } catch (NumberFormatException e) {
+        throw new InvalidConfigurationException(
+            "Invalid value for adaptor.docContentTimeoutSecs: "
+            + config.getValue("adaptor.docContentTimeoutSecs"));
+      }
+      try {
+        this.connectTimeout = Integer.parseInt(
+            config.getValue("adaptor.docHeaderTimeoutSecs")) * 1000;
+      } catch (NumberFormatException e) {
+        throw new InvalidConfigurationException(
+            "Invalid value for adaptor.docHeaderTimeoutSecs: "
+            + config.getValue("adaptor.docHeaderTimeoutSecs"));
       }
     }
 
