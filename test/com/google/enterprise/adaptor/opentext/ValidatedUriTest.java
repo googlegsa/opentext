@@ -14,17 +14,13 @@
 
 package com.google.enterprise.adaptor.opentext;
 
+import static com.google.enterprise.adaptor.opentext.Logging.captureLogMessages;
 import static org.junit.Assert.assertEquals;
 
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
-import java.util.logging.Handler;
-import java.util.logging.Level;
-import java.util.logging.LogRecord;
-import java.util.logging.Logger;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -50,7 +46,15 @@ public class ValidatedUriTest {
   @Test
   public void testNoProtocol() throws Exception {
     thrown.expect(URISyntaxException.class);
+    thrown.expectMessage("no protocol");
     new ValidatedUri("//foo/bar");
+  }
+
+  @Test
+  public void testRelativeUri() throws Exception {
+    thrown.expect(URISyntaxException.class);
+    thrown.expectMessage("no protocol");
+    new ValidatedUri("foo/bar");
   }
 
   @Test
@@ -66,15 +70,24 @@ public class ValidatedUriTest {
   }
 
   @Test
-  public void testNoHost() throws Exception {
+  public void testNoHostOrPath() throws Exception {
     thrown.expect(URISyntaxException.class);
+    thrown.expectMessage("Expected authority");
     new ValidatedUri("http://");
   }
 
   @Test
-  public void testRelativeUri() throws Exception {
+  public void testNoHost() throws Exception {
     thrown.expect(URISyntaxException.class);
-    new ValidatedUri("foo/bar");
+    thrown.expectMessage("no host");
+    new ValidatedUri("http:///foo/bar");
+  }
+
+  @Test
+  public void testNoAuthority() throws Exception {
+    thrown.expect(URISyntaxException.class);
+    thrown.expectMessage("no host");
+    new ValidatedUri("file:/foo/bar");
   }
 
   @Test
@@ -108,6 +121,15 @@ public class ValidatedUriTest {
   }
 
   @Test
+  public void testUnderscoreInHostName() throws Exception {
+    // new URI("http://foo_bar/baz") parses incorrectly, but does not throw a
+    // URISyntaxException. The host part, however, is discarded. So our check
+    // for missing host should catch this.
+    thrown.expect(URISyntaxException.class);
+    new ValidatedUri("http://foo_bar/baz").getUri();
+  }
+
+  @Test
   public void testGetUri() throws Exception {
     assertEquals(new URI("http://example.com/foo/bar"),
         new ValidatedUri("http://example.com/foo/bar").getUri());
@@ -127,30 +149,5 @@ public class ValidatedUriTest {
     captureLogMessages(ValidatedUri.class, "is not reachable", messages);
     new ValidatedUri("http://unknown-host/foo/bar").logUnreachableHost();
     assertEquals(messages.toString(), 1, messages.size());
-  }
-
-  /**
-   * Enables logging and captures matching log messages. The messages
-   * will not be localized or formatted.
-   *
-   * @param clazz the class to enable logging for
-   * @param substring capture log messages containing this substring
-   * @param output captured messages will be added to this collection
-   */
-  public static void captureLogMessages(Class<?> clazz,
-      final String substring, final Collection<? super String> output) {
-    Logger logger = Logger.getLogger(clazz.getName());
-    logger.setLevel(Level.ALL);
-
-    logger.addHandler(new Handler() {
-        @Override public void close() {}
-        @Override public void flush() {}
-
-        @Override public void publish(LogRecord record) {
-          if (record.getMessage().contains(substring)) {
-            output.add(record.getMessage());
-          }
-        }
-      });
   }
 }
