@@ -38,6 +38,10 @@ opentext.src.separator = ,
 # URL for Content Server: http://<host>[:<port>]/OTCS/livelink.exe
 opentext.displayUrl.contentServerUrl = <Content Server URL>
 
+# This URL is used for internal connector search and download actions.
+# If not specified, opentext.displayUrl.contentServerUrl will be used.
+opentext.indexing.contentServerUrl =
+
 # Whether to create a group containing all users who have Public
 # Access permission and include that group in the ACL for items
 # with Public Access enabled.
