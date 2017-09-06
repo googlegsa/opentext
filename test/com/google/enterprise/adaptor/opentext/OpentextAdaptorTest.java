@@ -24,20 +24,24 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import com.google.common.base.Joiner;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableMultimap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.enterprise.adaptor.Acl;
 import com.google.enterprise.adaptor.AdaptorContext;
 import com.google.enterprise.adaptor.Config;
 import com.google.enterprise.adaptor.DocId;
-import com.google.enterprise.adaptor.DocIdPusher;
 import com.google.enterprise.adaptor.GroupPrincipal;
 import com.google.enterprise.adaptor.IOHelper;
 import com.google.enterprise.adaptor.InvalidConfigurationException;
 import com.google.enterprise.adaptor.Principal;
 import com.google.enterprise.adaptor.Request;
-import com.google.enterprise.adaptor.Response;
 import com.google.enterprise.adaptor.UserPrincipal;
+import com.google.enterprise.adaptor.testing.RecordingDocIdPusher;
+import com.google.enterprise.adaptor.testing.RecordingResponse;
 
 import com.opentext.ecm.services.authws.AuthenticationException;
 import com.opentext.ecm.services.authws.AuthenticationException_Exception;
@@ -108,6 +112,7 @@ import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -504,12 +509,11 @@ public class OpentextAdaptorTest {
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
 
-    DocIdPusherMock docIdPusherMock = new DocIdPusherMock();
-    adaptor.getDocIds(
-        Proxies.newProxyInstance(DocIdPusher.class, docIdPusherMock));
-    assertEquals(1, docIdPusherMock.docIds.size());
+    RecordingDocIdPusher pusher = new RecordingDocIdPusher();
+    adaptor.getDocIds(pusher);
+    assertEquals(1, pusher.getDocIds().size());
     assertEquals(
-        "EnterpriseWS:2000", docIdPusherMock.docIds.get(0).getUniqueId());
+        "EnterpriseWS:2000", pusher.getDocIds().get(0).getUniqueId());
   }
 
   @Test
@@ -521,12 +525,11 @@ public class OpentextAdaptorTest {
     config.overrideKey("opentext.src", "1001, 1002, 1003");
     adaptor.init(context);
 
-    DocIdPusherMock docIdPusherMock = new DocIdPusherMock();
-    adaptor.getDocIds(
-        Proxies.newProxyInstance(DocIdPusher.class, docIdPusherMock));
-    assertEquals(2, docIdPusherMock.docIds.size());
-    assertEquals("1001:1001", docIdPusherMock.docIds.get(0).getUniqueId());
-    assertEquals("1003:1003", docIdPusherMock.docIds.get(1).getUniqueId());
+    RecordingDocIdPusher pusher = new RecordingDocIdPusher();
+    adaptor.getDocIds(pusher);
+    assertEquals(2, pusher.getDocIds().size());
+    assertEquals("1001:1001", pusher.getDocIds().get(0).getUniqueId());
+    assertEquals("1003:1003", pusher.getDocIds().get(1).getUniqueId());
   }
 
   @Test
@@ -545,10 +548,9 @@ public class OpentextAdaptorTest {
     soapFactory.memberServiceMock.addMemberToGroup(
         2000, soapFactory.memberServiceMock.getMemberById(1000));
 
-    DocIdPusherMock docIdPusherMock = new DocIdPusherMock();
-    adaptor.getDocIds(
-        Proxies.newProxyInstance(DocIdPusher.class, docIdPusherMock));
-    assertEquals(null, docIdPusherMock.groupDefinitions);
+    RecordingDocIdPusher pusher = new RecordingDocIdPusher();
+    adaptor.getDocIds(pusher);
+    assertTrue(pusher.getGroupDefinitions().isEmpty());
   }
 
   @Test
@@ -567,14 +569,13 @@ public class OpentextAdaptorTest {
     soapFactory.memberServiceMock.addMemberToGroup(
         2000, soapFactory.memberServiceMock.getMemberById(1000));
 
-    DocIdPusherMock docIdPusherMock = new DocIdPusherMock();
-    adaptor.getDocIds(
-        Proxies.newProxyInstance(DocIdPusher.class, docIdPusherMock));
+    RecordingDocIdPusher pusher = new RecordingDocIdPusher();
+    adaptor.getDocIds(pusher);
     Map<GroupPrincipal, List<Principal>> expected =
         new HashMap<GroupPrincipal, List<Principal>>();
     expected.put(newGroupPrincipal("group1"),
         Lists.<Principal>newArrayList(newUserPrincipal("user1")));
-    assertEquals(expected, docIdPusherMock.groupDefinitions);
+    assertEquals(expected, pusher.getGroupDefinitions());
   }
 
   @Test
@@ -723,18 +724,25 @@ public class OpentextAdaptorTest {
     config.overrideKey("opentext.indexFolders", "true");
     adaptor.init(context);
 
-    ResponseMock responseMock = new ResponseMock();
-    Response response =
-        Proxies.newProxyInstance(Response.class, responseMock);
-    RequestMock requestMock = new RequestMock(
-        new DocId("EnterpriseWS/Folder+Name:3143"));
-    Request request = Proxies.newProxyInstance(Request.class,
-        requestMock);
+    RecordingResponse response = new RecordingResponse();
+    Request request = new RequestMock("EnterpriseWS/Folder+Name:3143");
     adaptor.getDocContent(request, response);
     assertEquals("http://localhost/otcs/livelink.exe"
         + "?func=ll&objAction=properties&objId=3143",
-        responseMock.displayUrl.toString());
-    assertFalse(responseMock.noIndex);
+        response.getDisplayUrl().toString());
+    assertFalse(response.isNoIndex());
+  }
+
+  /** Returns an adaptor Metadata from the supplied Map */
+  private com.google.enterprise.adaptor.Metadata expectedMetadata(
+      Map<String, String> metadata) {
+    return new com.google.enterprise.adaptor.Metadata(metadata.entrySet());
+  }
+
+  /** Returns an adaptor Metadata from the supplied Multimap */
+  private com.google.enterprise.adaptor.Metadata expectedMetadata(
+      Multimap<String, String> metadata) {
+    return new com.google.enterprise.adaptor.Metadata(metadata.entries());
   }
 
   @Test
@@ -757,22 +765,21 @@ public class OpentextAdaptorTest {
     config.overrideKey("opentext.indexFolders", "false");
     adaptor.init(context);
 
-    ResponseMock responseMock = new ResponseMock();
-    Response response =
-        Proxies.newProxyInstance(Response.class, responseMock);
-    RequestMock requestMock = new RequestMock(
-        new DocId("EnterpriseWS/Folder+Name:3143"));
-    Request request = Proxies.newProxyInstance(Request.class,
-        requestMock);
+    RecordingResponse response = new RecordingResponse();
+    Request request = new RequestMock("EnterpriseWS/Folder+Name:3143");
     adaptor.getDocContent(request, response);
     assertEquals("http://localhost/otcs/livelink.exe"
         + "?func=ll&objAction=properties&objId=3143",
-        responseMock.displayUrl.toString());
-    assertTrue(responseMock.noIndex);
+        response.getDisplayUrl().toString());
+    assertTrue(response.isNoIndex());
     assertEquals(
-        Lists.newArrayList("3143"), responseMock.getMetadata().get("ID"));
-    assertEquals(Lists.newArrayList("Folder Name"),
-        responseMock.getMetadata().get("Name"));
+        expectedMetadata(
+            ImmutableMap.of(
+                "ID", "3143",
+                "Name", "Folder Name",
+                "SubType", "Folder",
+                "VolumeID", "0")),
+        response.getMetadata());
   }
 
   @Test
@@ -795,15 +802,10 @@ public class OpentextAdaptorTest {
     config.overrideKey("adaptor.markAllDocsAsPublic", "true");
     adaptor.init(context);
 
-    ResponseMock responseMock = new ResponseMock();
-    Response response =
-        Proxies.newProxyInstance(Response.class, responseMock);
-    RequestMock requestMock = new RequestMock(
-        new DocId("EnterpriseWS/Folder+Name:3143"));
-    Request request = Proxies.newProxyInstance(Request.class,
-        requestMock);
+    RecordingResponse response = new RecordingResponse();
+    Request request = new RequestMock("EnterpriseWS/Folder+Name:3143");
     adaptor.getDocContent(request, response);
-    assertEquals(null, responseMock.getAcl());
+    assertEquals(null, response.getAcl());
   }
 
   @Test
@@ -826,18 +828,13 @@ public class OpentextAdaptorTest {
     config.overrideKey("adaptor.markAllDocsAsPublic", "false");
     adaptor.init(context);
 
-    ResponseMock responseMock = new ResponseMock();
-    Response response =
-        Proxies.newProxyInstance(Response.class, responseMock);
-    RequestMock requestMock = new RequestMock(
-        new DocId("EnterpriseWS/Folder+Name:3143"));
-    Request request = Proxies.newProxyInstance(Request.class,
-        requestMock);
+    RecordingResponse response = new RecordingResponse();
+    Request request = new RequestMock("EnterpriseWS/Folder+Name:3143");
     adaptor.getDocContent(request, response);
     Acl expected = new Acl.Builder()
         .setPermitUsers(Sets.newHashSet(newUserPrincipal("testuser1")))
         .build();
-    assertEquals(expected, responseMock.getAcl());
+    assertEquals(expected, response.getAcl());
   }
 
   @Test
@@ -861,10 +858,8 @@ public class OpentextAdaptorTest {
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
 
-    ResponseMock responseMock = new ResponseMock();
-    Response response = Proxies.newProxyInstance(Response.class,
-        responseMock);
-
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    RecordingResponse response = new RecordingResponse(baos);
     DocumentManagement documentManagement =
         soapFactory.newDocumentManagement("token");
     adaptor.doContainer(documentManagement,
@@ -880,8 +875,7 @@ public class OpentextAdaptorTest {
         + "<li><a href=\"2000/Folder/Document+2:4002\">Document 2</a></li>"
         + "<li><a href=\"2000/Folder/Document+3:4003\">Document 3</a></li>"
         + "</body></html>";
-    assertEquals(expected,
-        responseMock.outputStream.toString("UTF-8"));
+    assertEquals(expected, baos.toString(UTF_8.name()));
   }
 
   @Test
@@ -980,12 +974,8 @@ public class OpentextAdaptorTest {
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
 
-    RequestMock requestMock = new RequestMock(docId);
-    Request request = Proxies.newProxyInstance(Request.class, requestMock);
-    ResponseMock responseMock = new ResponseMock();
-    Response response = Proxies.newProxyInstance(Response.class,
-        responseMock);
-
+    Request request = new RequestMock(docId);
+    RecordingResponse response = new RecordingResponse();
     DocumentManagement documentManagement =
         soapFactory.newDocumentManagement("token");
     adaptor.doDocument(documentManagement, testDocId,
@@ -1009,20 +999,16 @@ public class OpentextAdaptorTest {
     config.overrideKey("opentext.indexing.downloadMethod", "webservices");
     adaptor.init(context);
 
-    RequestMock requestMock = new RequestMock(docId);
-    Request request = Proxies.newProxyInstance(Request.class, requestMock);
-    ResponseMock responseMock = new ResponseMock();
-    Response response = Proxies.newProxyInstance(Response.class,
-        responseMock);
-
+    Request request = new RequestMock(docId);
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    RecordingResponse response = new RecordingResponse(baos);
     DocumentManagement documentManagement =
         soapFactory.newDocumentManagement("token");
     adaptor.doDocument(documentManagement, testDocId,
         documentNode, request, response);
 
-    assertEquals("text/plain", responseMock.contentType);
-    assertEquals("this is the content",
-        responseMock.outputStream.toString("UTF-8"));
+    assertEquals("text/plain", response.getContentType());
+    assertEquals("this is the content", baos.toString(UTF_8.name()));
   }
 
   @Test
@@ -1047,20 +1033,17 @@ public class OpentextAdaptorTest {
 
       adaptor.init(context);
 
-      RequestMock requestMock = new RequestMock(docId);
-      Request request = Proxies.newProxyInstance(Request.class, requestMock);
-      ResponseMock responseMock = new ResponseMock();
-      Response response = Proxies.newProxyInstance(Response.class,
-          responseMock);
-
+      Request request = new RequestMock(docId);
+      ByteArrayOutputStream baos = new ByteArrayOutputStream();
+      RecordingResponse response = new RecordingResponse(baos);
       DocumentManagement documentManagement =
           soapFactory.newDocumentManagement("token");
       adaptor.doDocument(documentManagement, testDocId,
           documentNode, request, response);
 
-      assertEquals("text/plain", responseMock.contentType);
+      assertEquals("text/plain", response.getContentType());
       assertEquals("this is the web-based content",
-          responseMock.outputStream.toString("UTF-8"));
+          baos.toString(UTF_8.name()));
     } finally {
       server.stop(0);
     }
@@ -1089,20 +1072,16 @@ public class OpentextAdaptorTest {
 
       adaptor.init(context);
 
-      RequestMock requestMock = new RequestMock(docId);
-      Request request = Proxies.newProxyInstance(Request.class, requestMock);
-      ResponseMock responseMock = new ResponseMock();
-      Response response = Proxies.newProxyInstance(Response.class,
-          responseMock);
-
+      Request request = new RequestMock(docId);
+      ByteArrayOutputStream baos = new ByteArrayOutputStream();
+      RecordingResponse response = new RecordingResponse(baos);
       DocumentManagement documentManagement =
           soapFactory.newDocumentManagement("token");
       adaptor.doDocument(documentManagement, testDocId,
           documentNode, request, response);
 
-      assertEquals("text/plain", responseMock.contentType);
-      assertEquals("this is the handler content",
-          responseMock.outputStream.toString("UTF-8"));
+      assertEquals("text/plain", response.getContentType());
+      assertEquals("this is the handler content", baos.toString(UTF_8.name()));
     } finally {
       server.stop(0);
     }
@@ -1125,20 +1104,16 @@ public class OpentextAdaptorTest {
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
 
-    RequestMock requestMock = new RequestMock(docId);
-    Request request = Proxies.newProxyInstance(Request.class, requestMock);
-    ResponseMock responseMock = new ResponseMock();
-    Response response =
-        Proxies.newProxyInstance(Response.class, responseMock);
-
+    Request request = new RequestMock(docId);
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    RecordingResponse response = new RecordingResponse(baos);
     DocumentManagement documentManagement =
         soapFactory.newDocumentManagement("token");
     adaptor.doDocument(documentManagement, testDocId,
         documentNode, request, response);
 
-    assertNull(responseMock.contentType);
-    assertEquals("",
-        responseMock.outputStream.toString(UTF_8.name()));
+    assertNull(response.getContentType());
+    assertEquals("", baos.toString(UTF_8.name()));
   }
 
   @Test
@@ -1158,20 +1133,16 @@ public class OpentextAdaptorTest {
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
 
-    RequestMock requestMock = new RequestMock(docId);
-    Request request = Proxies.newProxyInstance(Request.class, requestMock);
-    ResponseMock responseMock = new ResponseMock();
-    Response response =
-        Proxies.newProxyInstance(Response.class, responseMock);
-
+    Request request = new RequestMock(docId);
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    RecordingResponse response = new RecordingResponse(baos);
     DocumentManagement documentManagement =
         soapFactory.newDocumentManagement("token");
     adaptor.doDocument(documentManagement, testDocId,
         documentNode, request, response);
 
-    assertNull(responseMock.contentType);
-    assertEquals("",
-        responseMock.outputStream.toString(UTF_8.name()));
+    assertNull(response.getContentType());
+    assertEquals("", baos.toString(UTF_8.name()));
   }
 
   @Test
@@ -1196,19 +1167,15 @@ public class OpentextAdaptorTest {
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
 
-    RequestMock requestMock = new RequestMock(docId, lastAccessTime);
-    Request request = Proxies.newProxyInstance(Request.class, requestMock);
-    ResponseMock responseMock = new ResponseMock();
-    Response response =
-        Proxies.newProxyInstance(Response.class, responseMock);
-
+    Request request = new RequestMock(docId, lastAccessTime);
+    RecordingResponse response = new RecordingResponse();
     DocumentManagement documentManagement =
         soapFactory.newDocumentManagement("token");
     adaptor.doDocument(documentManagement, testDocId,
         documentNode, request, response);
 
-    assertNull(responseMock.contentType);
-    assertTrue(responseMock.noContent);
+    assertNull(response.getContentType());
+    assertEquals(RecordingResponse.State.NO_CONTENT, response.getState());
   }
 
   @Test
@@ -1227,17 +1194,10 @@ public class OpentextAdaptorTest {
     config.overrideKey("opentext.excludedNodeTypes", "Alias");
     adaptor.init(context);
 
-    ResponseMock responseMock = new ResponseMock();
-    Response response = Proxies.newProxyInstance(Response.class,
-        responseMock);
-
-    RequestMock requestMock = new RequestMock(
-        new DocId("EnterpriseWS/Title+of+Document:3143"));
-    Request request = Proxies.newProxyInstance(Request.class,
-        requestMock);
-
+    RecordingResponse response = new RecordingResponse();
+    Request request = new RequestMock("EnterpriseWS/Title+of+Document:3143");
     adaptor.getDocContent(request, response);
-    assertTrue(responseMock.notFound());
+    assertEquals(RecordingResponse.State.NOT_FOUND, response.getState());
   }
 
   @Test
@@ -1265,17 +1225,15 @@ public class OpentextAdaptorTest {
     config.overrideKey("opentext.indexSearchableAttributesOnly", "false");
     adaptor.init(context);
 
-    ResponseMock responseMock = new ResponseMock();
-    adaptor.doPrimitiveValue(stringValue,
-        Proxies.newProxyInstance(Response.class, responseMock),
-        attrDefinitionCache, null);
-
-    Map<String, List<String>> metadata = responseMock.getMetadata();
-    List<String> values = metadata.get("attribute name");
-    assertNotNull(values);
+    RecordingResponse response = new RecordingResponse();
+    adaptor.doPrimitiveValue(stringValue, response, attrDefinitionCache, null);
     assertEquals(
-        Lists.newArrayList("first value", "second value", "third value"),
-        values);
+        expectedMetadata(
+            ImmutableMultimap.of(
+                "attribute name", "first value",
+                "attribute name", "second value",
+                "attribute name", "third value")),
+        response.getMetadata());
   }
 
   @Test
@@ -1304,23 +1262,22 @@ public class OpentextAdaptorTest {
     adaptor.init(context);
 
     // When the attribute is not searchable, no metadata is returned.
-    ResponseMock responseMock = new ResponseMock();
-    adaptor.doPrimitiveValue(stringValue,
-        Proxies.newProxyInstance(Response.class, responseMock),
-        attrDefinitionCache, null);
-    Map<String, List<String>> metadata = responseMock.getMetadata();
-    List<String> values = metadata.get("attribute name");
-    assertNull(values);
+    RecordingResponse response = new RecordingResponse();
+    adaptor.doPrimitiveValue(stringValue, response, attrDefinitionCache, null);
+    assertEquals(expectedMetadata(ImmutableMap.<String, String>of()),
+        response.getMetadata());
 
     // When the attribute is searchable, metadata is returned.
     attribute.setSearchable(true);
-    responseMock = new ResponseMock();
-    adaptor.doPrimitiveValue(stringValue,
-        Proxies.newProxyInstance(Response.class, responseMock),
-        attrDefinitionCache, null);
-    metadata = responseMock.getMetadata();
-    values = metadata.get("attribute name");
-    assertNotNull(values);
+    response = new RecordingResponse();
+    adaptor.doPrimitiveValue(stringValue, response, attrDefinitionCache, null);
+    assertEquals(
+        expectedMetadata(
+            ImmutableMultimap.of(
+                "attribute name", "first value",
+                "attribute name", "second value",
+                "attribute name", "third value")),
+        response.getMetadata());
   }
 
   @Test
@@ -1347,16 +1304,15 @@ public class OpentextAdaptorTest {
 
     SoapFactoryMock soapFactory = new SoapFactoryMock();
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
-    ResponseMock responseMock = new ResponseMock();
+    RecordingResponse response = new RecordingResponse();
     soapFactory.memberServiceMock.addMember(member);
-    adaptor.doPrimitiveValue(integerValue,
-        Proxies.newProxyInstance(Response.class, responseMock),
+    adaptor.doPrimitiveValue(integerValue, response,
         attrDefinitionCache, soapFactory.newMemberService(null));
 
-    Map<String, List<String>> metadata = responseMock.getMetadata();
-    List<String> values = metadata.get("user attribute name");
-    assertNotNull(values);
-    assertEquals(Lists.newArrayList("testuser1"), values);
+    assertEquals(
+        expectedMetadata(
+            ImmutableMap.of("user attribute name", "testuser1")),
+        response.getMetadata());
   }
 
   @Test
@@ -1381,15 +1337,14 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
-    ResponseMock responseMock = new ResponseMock();
-    adaptor.doPrimitiveValue(dateValue,
-        Proxies.newProxyInstance(Response.class, responseMock),
+    RecordingResponse response = new RecordingResponse();
+    adaptor.doPrimitiveValue(dateValue, response,
         attrDefinitionCache, soapFactory.newMemberService(null));
 
-    Map<String, List<String>> metadata = responseMock.getMetadata();
-    List<String> values = metadata.get("date attribute name");
-    assertNotNull(values);
-    assertEquals(Lists.newArrayList("1998-12-12"), values);
+    assertEquals(
+        expectedMetadata(
+            ImmutableMap.of("date attribute name", "1998-12-12")),
+        response.getMetadata());
   }
 
   @Test
@@ -1428,20 +1383,17 @@ public class OpentextAdaptorTest {
 
     SoapFactoryMock soapFactory = new SoapFactoryMock();
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
-    ResponseMock responseMock = new ResponseMock();
-    adaptor.doTableValue(tableValue,
-        Proxies.newProxyInstance(Response.class, responseMock),
-        attrDefinitionCache, null);
+    RecordingResponse response = new RecordingResponse();
+    adaptor.doTableValue(tableValue, response, attrDefinitionCache, null);
 
-    Map<String, List<String>> metadata = responseMock.getMetadata();
-    List<String> values = metadata.get("string attribute name");
-    assertNotNull(values);
     assertEquals(
-        Lists.newArrayList("first value", "second value", "third value"),
-        values);
-    values = metadata.get("boolean attribute name");
-    assertNotNull(values);
-    assertEquals(Lists.newArrayList("true"), values);
+        expectedMetadata(
+            ImmutableMultimap.of(
+                "string attribute name", "first value",
+                "string attribute name", "second value",
+                "string attribute name", "third value",
+                "boolean attribute name", "true")),
+        response.getMetadata());
   }
 
   @Test
@@ -1493,19 +1445,17 @@ public class OpentextAdaptorTest {
     soapFactory.documentManagementMock.addCategoryDefinition(
         categoryDefinition);
 
-    ResponseMock responseMock = new ResponseMock();
+    RecordingResponse response = new RecordingResponse();
     adaptor.doCategories(soapFactory.newDocumentManagement("token"),
-        documentNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
-    Map<String, List<String>> responseMetadata = responseMock.getMetadata();
-    List<String> values = responseMetadata.get("string attribute name");
-    assertNotNull(values);
+        documentNode, response);
     assertEquals(
-        Lists.newArrayList("first value", "second value", "third value"),
-        values);
-    values = responseMetadata.get("boolean attribute name");
-    assertNotNull(values);
-    assertEquals(Lists.newArrayList("true"), values);
+        expectedMetadata(
+            ImmutableMultimap.of(
+                "string attribute name", "first value",
+                "string attribute name", "second value",
+                "string attribute name", "third value",
+                "boolean attribute name", "true")),
+        response.getMetadata());
   }
 
   @Test
@@ -1639,13 +1589,13 @@ public class OpentextAdaptorTest {
     soapFactory.documentManagementMock.addCategoryDefinition(
         categoryDefinition);
 
-    ResponseMock responseMock = new ResponseMock();
+    RecordingResponse response = new RecordingResponse();
     adaptor.doCategories(soapFactory.newDocumentManagement("token"),
-        documentNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
-    Map<String, List<String>> responseMetadata = responseMock.getMetadata();
+        documentNode, response);
     assertEquals(
-        "Category Display Name", responseMetadata.get("Category").get(0));
+        expectedMetadata(
+            ImmutableMap.of("Category", "Category Display Name")),
+        response.getMetadata());
   }
 
   @Test
@@ -1713,13 +1663,12 @@ public class OpentextAdaptorTest {
     feature.setType("Boolean");
     node.getFeatures().add(feature);
 
-    ResponseMock responseMock = new ResponseMock();
-    adaptor.doNodeFeatures(
-        node, Proxies.newProxyInstance(Response.class, responseMock));
-    Map<String, List<String>> responseMetadata = responseMock.getMetadata();
-    assertEquals(1, responseMetadata.size());
-    assertEquals("true", responseMetadata.get("Feature1").get(0));
-    assertNull(responseMetadata.get("Feature2"));
+    RecordingResponse response = new RecordingResponse();
+    adaptor.doNodeFeatures(node, response);
+    assertEquals(
+        expectedMetadata(
+            ImmutableMap.of("Feature1", "true")),
+        response.getMetadata());
   }
 
   @Test
@@ -1739,13 +1688,12 @@ public class OpentextAdaptorTest {
     feature.setType("Date");
     node.getFeatures().add(feature);
 
-    ResponseMock responseMock = new ResponseMock();
-    adaptor.doNodeFeatures(
-        node, Proxies.newProxyInstance(Response.class, responseMock));
-    Map<String, List<String>> responseMetadata = responseMock.getMetadata();
-    assertEquals(1, responseMetadata.size());
-    assertEquals("2011-02-01", responseMetadata.get("Feature1").get(0));
-    assertNull(responseMetadata.get("Feature2"));
+    RecordingResponse response = new RecordingResponse();
+    adaptor.doNodeFeatures(node, response);
+    assertEquals(
+        expectedMetadata(
+            ImmutableMap.of("Feature1", "2011-02-01")),
+        response.getMetadata());
   }
 
   @Test
@@ -1770,24 +1718,26 @@ public class OpentextAdaptorTest {
     versionInfo.setMimeType("test/mime-type");
     node.setVersionInfo(versionInfo);
 
-    ResponseMock responseMock = new ResponseMock();
+    RecordingResponse response = new RecordingResponse();
     adaptor.doNodeProperties(soapFactory.newDocumentManagement("token"),
-        node, Proxies.newProxyInstance(Response.class, responseMock));
-    Map<String, List<String>> responseMetadata = responseMock.getMetadata();
-
-    assertEquals("54678", responseMetadata.get("ID").get(0));
-    assertEquals("Node Name", responseMetadata.get("Name").get(0));
-    assertEquals("Node comment", responseMetadata.get("Comment").get(0));
-    assertEquals("2012-04-01", responseMetadata.get("CreateDate").get(0));
-    assertEquals("2013-04-01", responseMetadata.get("ModifyDate").get(0));
-    assertEquals("testuser1", responseMetadata.get("CreatedBy").get(0));
-    assertEquals("NodeType", responseMetadata.get("SubType").get(0));
+        node, response);
     assertEquals(
-        "Node Display Type", responseMetadata.get("DisplayType").get(0));
-    assertEquals("-321", responseMetadata.get("VolumeID").get(0));
-    assertEquals("test/mime-type", responseMetadata.get("MimeType").get(0));
+        expectedMetadata(
+            new ImmutableMap.Builder<String, String>()
+            .put("ID", "54678")
+            .put("Name", "Node Name")
+            .put("Comment", "Node comment")
+            .put("CreateDate", "2012-04-01")
+            .put("ModifyDate", "2013-04-01")
+            .put("CreatedBy", "testuser1")
+            .put("SubType", "NodeType")
+            .put("DisplayType", "Node Display Type")
+            .put("VolumeID", "-321")
+            .put("MimeType", "test/mime-type")
+            .build()),
+        response.getMetadata());
     assertEquals(node.getModifyDate().toGregorianCalendar().getTime(),
-        responseMock.lastModified);
+        response.getLastModified());
   }
 
   @Test
@@ -1803,13 +1753,20 @@ public class OpentextAdaptorTest {
     node.setCreateDate(2012, 3, 1, 4, 34, 21);
     node.setModifyDate(2013, 3, 1, 4, 34, 21);
 
-    ResponseMock responseMock = new ResponseMock();
+    RecordingResponse response = new RecordingResponse();
     adaptor.doNodeProperties(soapFactory.newDocumentManagement("token"),
-        node, Proxies.newProxyInstance(Response.class, responseMock));
-    Map<String, List<String>> responseMetadata = responseMock.getMetadata();
-
-    assertEquals("04 01, 2012", responseMetadata.get("CreateDate").get(0));
-    assertEquals("04 01, 2013", responseMetadata.get("ModifyDate").get(0));
+        node, response);
+    assertEquals(
+        expectedMetadata(
+            new ImmutableMap.Builder<String, String>()
+            .put("ID", "54678")
+            .put("Name", "Node Name")
+            .put("CreateDate", "04 01, 2012")
+            .put("ModifyDate", "04 01, 2013")
+            .put("SubType", "NodeType")
+            .put("VolumeID", "0")
+            .build()),
+        response.getMetadata());
   }
 
   @Test
@@ -1820,17 +1777,16 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
-    ResponseMock responseMock = new ResponseMock();
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    RecordingResponse response = new RecordingResponse(baos);
     adaptor.doNode(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("432:432")),
-        node,
-        Proxies.newProxyInstance(Response.class, responseMock));
+        node, response);
     String expected = "<!DOCTYPE html>\n"
         + "<html><head><title>Test Node</title></head>"
         + "<body><h1>Test Node</h1>"
         + "</body></html>";
-    assertEquals(expected,
-        responseMock.outputStream.toString("UTF-8"));
+    assertEquals(expected, baos.toString(UTF_8.name()));
   }
 
   @Test
@@ -1851,11 +1807,11 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
-    ResponseMock responseMock = new ResponseMock();
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    RecordingResponse response = new RecordingResponse(baos);
     adaptor.doCollection(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/CollectionName:3000")),
-        containerNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
+        containerNode, response);
     String expected = "<!DOCTYPE html>\n"
         + "<html><head><title>CollectionName</title></head>"
         + "<body><h1>CollectionName</h1>"
@@ -1863,8 +1819,7 @@ public class OpentextAdaptorTest {
         + "<p>Document 2</p>"
         + "<p>Document 3</p>"
         + "</body></html>";
-    assertEquals(expected,
-        responseMock.outputStream.toString("UTF-8"));
+    assertEquals(expected, baos.toString(UTF_8.name()));
   }
 
   @Test
@@ -1882,19 +1837,28 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
-    ResponseMock responseMock = new ResponseMock();
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    RecordingResponse response = new RecordingResponse(baos);
     adaptor.doCollection(
         soapFactory.newDocumentManagement(new DocumentManagementMockError()),
         new OpentextDocId(new DocId("2000/Folder:3000")),
-        containerNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
+        containerNode, response);
 
     String expected = "<!DOCTYPE html>\n"
         + "<html><head><title>CollectionName</title></head>"
         + "<body><h1>CollectionName</h1>"
         + "</body></html>";
-    assertEquals(expected,
-        responseMock.outputStream.toString("UTF-8"));
+    assertEquals(expected, baos.toString(UTF_8.name()));
+  }
+
+  /** Returns the keySet of the anchors in the response. */
+  // TODO(bmj): This can go away if we upgrade to guava 19
+  private Set<String> getAnchorKeySet(RecordingResponse response) {
+    ImmutableSet.Builder<String> builder = ImmutableSet.builder();
+    for (Map.Entry<String, URI> entry : response.getAnchors()) {
+      builder.add(entry.getKey());
+    }
+    return builder.build();
   }
 
   @Test
@@ -1942,45 +1906,44 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
-    ResponseMock responseMock = new ResponseMock();
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    RecordingResponse response = new RecordingResponse(baos);
     adaptor.doMilestone(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/TestMilestone:3000")),
-        milestoneNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
+        milestoneNode, response);
     String expected = "<!DOCTYPE html>\n"
         + "<html><head><title>TestMilestone</title></head>"
         + "<body><h1>TestMilestone</h1>"
         + "</body></html>";
-    assertEquals(expected,
-        responseMock.outputStream.toString("UTF-8"));
-    Map<String, List<String>> responseMetadata = responseMock.getMetadata();
-    assertEquals("2011-02-01", responseMetadata.get("ActualDate").get(0));
-    assertEquals("45", responseMetadata.get("Duration").get(0));
-    assertEquals("2", responseMetadata.get("NumActive").get(0));
-    assertEquals("0", responseMetadata.get("NumCancelled").get(0));
-    assertEquals("3", responseMetadata.get("NumCompleted").get(0));
-    assertEquals("5", responseMetadata.get("NumInProcess").get(0));
-    assertEquals("2", responseMetadata.get("NumIssue").get(0));
-    assertEquals("0", responseMetadata.get("NumLate").get(0));
-    assertEquals("4", responseMetadata.get("NumOnHold").get(0));
-    assertEquals("7", responseMetadata.get("NumPending").get(0));
-    assertEquals("8", responseMetadata.get("NumTasks").get(0));
-    assertEquals("2012-02-01",
-        responseMetadata.get("OriginalTargetDate").get(0));
-    assertEquals("15.0", responseMetadata.get("PercentCancelled").get(0));
-    assertEquals("55.0", responseMetadata.get("PercentComplete").get(0));
-    assertEquals("32.0", responseMetadata.get("PercentInProcess").get(0));
-    assertEquals("11.0", responseMetadata.get("PercentIssue").get(0));
-    assertEquals("4.0", responseMetadata.get("PercentLate").get(0));
-    assertEquals("45.0", responseMetadata.get("PercentOnHold").get(0));
-    assertEquals("13.0", responseMetadata.get("PercentPending").get(0));
-    assertEquals("99", responseMetadata.get("Resources").get(0));
-    assertEquals("2013-02-01", responseMetadata.get("TargetDate").get(0));
-    List<String> anchors = responseMock.getAnchors();
-    assertEquals(3, anchors.size());
+    assertEquals(expected, baos.toString(UTF_8.name()));
     assertEquals(
-        Lists.newArrayList("Document 1", "Document 2", "Document 3"),
-        anchors);
+        expectedMetadata(
+            new ImmutableMap.Builder<String, String>()
+            .put("ActualDate", "2011-02-01")
+            .put("Duration", "45")
+            .put("NumActive", "2")
+            .put("NumCancelled", "0")
+            .put("NumCompleted", "3")
+            .put("NumInProcess", "5")
+            .put("NumIssue", "2")
+            .put("NumLate", "0")
+            .put("NumOnHold", "4")
+            .put("NumPending", "7")
+            .put("NumTasks", "8")
+            .put("OriginalTargetDate", "2012-02-01")
+            .put("PercentCancelled", "15.0")
+            .put("PercentComplete", "55.0")
+            .put("PercentInProcess", "32.0")
+            .put("PercentIssue", "11.0")
+            .put("PercentLate", "4.0")
+            .put("PercentOnHold", "45.0")
+            .put("PercentPending", "13.0")
+            .put("Resources", "99")
+            .put("TargetDate", "2013-02-01")
+            .build()),
+        response.getMetadata());
+    assertEquals(ImmutableSet.of("Document 1", "Document 2", "Document 3"),
+        getAnchorKeySet(response));
   }
 
   @Test
@@ -2011,26 +1974,25 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
-    ResponseMock responseMock = new ResponseMock();
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    RecordingResponse response = new RecordingResponse(baos);
     adaptor.doNews(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/News+Info+Name:12345")),
-        newsNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
+        newsNode, response);
     String expected = "<!DOCTYPE html>\n"
         + "<html><head><title>NewsInfoName</title></head>"
         + "<body><h1>This Is The Headline</h1>"
         + "<p>This is the news story.</p>"
         + "</body></html>";
-    assertEquals(expected,
-        responseMock.outputStream.toString("UTF-8"));
-    Map<String, List<String>> responseMetadata = responseMock.getMetadata();
-    assertEquals("2013-02-01", responseMetadata.get("EffectiveDate").get(0));
-    assertEquals("2013-02-11", responseMetadata.get("ExpirationDate").get(0));
-    List<String> anchors = responseMock.getAnchors();
-    assertEquals(3, anchors.size());
+    assertEquals(expected, baos.toString(UTF_8.name()));
     assertEquals(
-        Lists.newArrayList("Document 1", "Document 2", "Document 3"),
-        anchors);
+        expectedMetadata(
+            ImmutableMap.of(
+                "EffectiveDate", "2013-02-01",
+                "ExpirationDate", "2013-02-11")),
+        response.getMetadata());
+    assertEquals(ImmutableSet.of("Document 1", "Document 2", "Document 3"),
+        getAnchorKeySet(response));
   }
 
   @Test
@@ -2057,11 +2019,11 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
-    ResponseMock responseMock = new ResponseMock();
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    RecordingResponse response = new RecordingResponse(baos);
     adaptor.doNews(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/News+Name:12345")),
-        newsNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
+        newsNode, response);
     String expected = "<!DOCTYPE html>\n"
         + "<html><head><title>Folder 2000/News+Name:12345</title>"
         + "</head><body><h1>Folder 2000/News+Name:12345</h1>"
@@ -2069,8 +2031,7 @@ public class OpentextAdaptorTest {
         + "<li><a href=\"2000/News+Name/Document+2:4002\">Document 2</a></li>"
         + "<li><a href=\"2000/News+Name/Document+3:4003\">Document 3</a></li>"
         + "</body></html>";
-    assertEquals(expected,
-        responseMock.outputStream.toString("UTF-8"));
+    assertEquals(expected, baos.toString(UTF_8.name()));
   }
 
   @Test
@@ -2105,34 +2066,30 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
-    ResponseMock responseMock = new ResponseMock();
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    RecordingResponse response = new RecordingResponse(baos);
     adaptor.doProject(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/Project+Name:3000")),
-        projectNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
+        projectNode, response);
     String expected = "<!DOCTYPE html>\n"
         + "<html><head><title>ProjectName</title></head>"
         + "<body><h1>ProjectName</h1>"
         + "</body></html>";
-    assertEquals(expected,
-        responseMock.outputStream.toString("UTF-8"));
-    Map<String, List<String>> responseMetadata = responseMock.getMetadata();
-    assertEquals("2013-02-01", responseMetadata.get("StartDate").get(0));
-    assertEquals("2014-02-01", responseMetadata.get("TargetDate").get(0));
-    assertEquals("These are the goals.",
-        responseMetadata.get("Goals").get(0));
-    assertEquals("These are the initiatives.",
-        responseMetadata.get("Initiatives").get(0));
-    assertEquals("This is the mission.",
-        responseMetadata.get("Mission").get(0));
-    assertEquals("These are the objectives.",
-        responseMetadata.get("Objectives").get(0));
-    assertEquals("PENDING", responseMetadata.get("Status").get(0));
-    List<String> anchors = responseMock.getAnchors();
-    assertEquals(3, anchors.size());
+    assertEquals(expected, baos.toString(UTF_8.name()));
     assertEquals(
-        Lists.newArrayList("Document 1", "Document 2", "Document 3"),
-        anchors);
+        expectedMetadata(
+            new ImmutableMap.Builder<String, String>()
+            .put("StartDate", "2013-02-01")
+            .put("TargetDate", "2014-02-01")
+            .put("Goals", "These are the goals.")
+            .put("Initiatives", "These are the initiatives.")
+            .put("Mission", "This is the mission.")
+            .put("Objectives", "These are the objectives.")
+            .put("Status", "PENDING")
+            .build()),
+        response.getMetadata());
+    assertEquals(ImmutableSet.of("Document 1", "Document 2", "Document 3"),
+        getAnchorKeySet(response));
   }
 
   @Test
@@ -2159,11 +2116,11 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
-    ResponseMock responseMock = new ResponseMock();
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    RecordingResponse response = new RecordingResponse(baos);
     adaptor.doProject(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/ProjectName:3000")),
-        projectNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
+        projectNode, response);
     String expected = "<!DOCTYPE html>\n"
         + "<html><head><title>Folder 2000/ProjectName:3000</title>"
         + "</head><body><h1>Folder 2000/ProjectName:3000</h1>"
@@ -2174,8 +2131,7 @@ public class OpentextAdaptorTest {
         + "<li><a href=\"2000/ProjectName/Document+3:4003\">"
         + "Document 3</a></li>"
         + "</body></html>";
-    assertEquals(expected,
-        responseMock.outputStream.toString("UTF-8"));
+    assertEquals(expected, baos.toString(UTF_8.name()));
   }
 
   @Test
@@ -2208,26 +2164,25 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
-    ResponseMock responseMock = new ResponseMock();
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    RecordingResponse response = new RecordingResponse(baos);
     adaptor.doTopicReply(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/Project+Name:3000")),
-        discussionNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
+        discussionNode, response);
     String expected = "<!DOCTYPE html>\n"
         + "<html><head><title>Discussion item subject.</title></head>"
         + "<body><h1>Discussion item subject.</h1>"
         + "<p>Discussion item content.</p>"
         + "</body></html>";
-    assertEquals(expected,
-        responseMock.outputStream.toString("UTF-8"));
-    Map<String, List<String>> responseMetadata = responseMock.getMetadata();
-    assertEquals("2013-02-01", responseMetadata.get("PostedDate").get(0));
-    assertEquals("testuser1", responseMetadata.get("PostedBy").get(0));
-    List<String> anchors = responseMock.getAnchors();
-    assertEquals(3, anchors.size());
+    assertEquals(expected, baos.toString(UTF_8.name()));
     assertEquals(
-        Lists.newArrayList("Document 1", "Document 2", "Document 3"),
-        anchors);
+        expectedMetadata(
+            ImmutableMap.of(
+                "PostedDate", "2013-02-01",
+                "PostedBy", "testuser1")),
+        response.getMetadata());
+    assertEquals(ImmutableSet.of("Document 1", "Document 2", "Document 3"),
+        getAnchorKeySet(response));
   }
 
   @Test
@@ -2254,11 +2209,11 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
-    ResponseMock responseMock = new ResponseMock();
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    RecordingResponse response = new RecordingResponse(baos);
     adaptor.doTopicReply(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/Discussion+item+subject.:3000")),
-        discussionNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
+        discussionNode, response);
     String expected = "<!DOCTYPE html>\n"
         + "<html><head><title>Folder 2000/Discussion+item+subject.:3000"
         + "</title>"
@@ -2270,8 +2225,7 @@ public class OpentextAdaptorTest {
         + "<li><a href=\"2000/Discussion+item+subject./Document+3:4003\">"
         + "Document 3</a></li>"
         + "</body></html>";
-    assertEquals(expected,
-        responseMock.outputStream.toString("UTF-8"));
+    assertEquals(expected, baos.toString(UTF_8.name()));
   }
 
   @Test
@@ -2311,32 +2265,32 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
-    ResponseMock responseMock = new ResponseMock();
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    RecordingResponse response = new RecordingResponse(baos);
     adaptor.doTask(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/TaskName:3000")),
-        taskNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
+        taskNode, response);
     String expected = "<!DOCTYPE html>\n"
         + "<html><head><title>TaskName</title></head>"
         + "<body><h1>TaskName</h1>"
         + "<p>These are the comments.</p>"
         + "<p>These are the instructions.</p>"
         + "</body></html>";
-    assertEquals(expected,
-        responseMock.outputStream.toString("UTF-8"));
-    Map<String, List<String>> responseMetadata = responseMock.getMetadata();
-    assertEquals("testuser1", responseMetadata.get("AssignedTo").get(0));
-    assertEquals("2013-02-01", responseMetadata.get("CompletionDate").get(0));
-    assertEquals("2012-02-01", responseMetadata.get("DateAssigned").get(0));
-    assertEquals("2014-02-01", responseMetadata.get("DueDate").get(0));
-    assertEquals("2012-02-01", responseMetadata.get("StartDate").get(0));
-    assertEquals("LOW", responseMetadata.get("Priority").get(0));
-    assertEquals("PENDING", responseMetadata.get("Status").get(0));
-    List<String> anchors = responseMock.getAnchors();
-    assertEquals(3, anchors.size());
+    assertEquals(expected, baos.toString(UTF_8.name()));
     assertEquals(
-        Lists.newArrayList("Document 1", "Document 2", "Document 3"),
-        anchors);
+        expectedMetadata(
+            new ImmutableMap.Builder<String, String>()
+            .put("AssignedTo", "testuser1")
+            .put("CompletionDate", "2013-02-01")
+            .put("DateAssigned", "2012-02-01")
+            .put("DueDate", "2014-02-01")
+            .put("StartDate", "2012-02-01")
+            .put("Priority", "LOW")
+            .put("Status", "PENDING")
+            .build()),
+        response.getMetadata());
+    assertEquals(ImmutableSet.of("Document 1", "Document 2", "Document 3"),
+        getAnchorKeySet(response));
   }
 
   @Test
@@ -2363,11 +2317,11 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
-    ResponseMock responseMock = new ResponseMock();
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    RecordingResponse response = new RecordingResponse(baos);
     adaptor.doTask(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/TaskName:3000")),
-        taskNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
+        taskNode, response);
     String expected = "<!DOCTYPE html>\n"
         + "<html><head><title>Folder 2000/TaskName:3000</title>"
         + "</head><body><h1>Folder 2000/TaskName:3000</h1>"
@@ -2375,8 +2329,7 @@ public class OpentextAdaptorTest {
         + "<li><a href=\"2000/TaskName/Document+2:4002\">Document 2</a></li>"
         + "<li><a href=\"2000/TaskName/Document+3:4003\">Document 3</a></li>"
         + "</body></html>";
-    assertEquals(expected,
-        responseMock.outputStream.toString("UTF-8"));
+    assertEquals(expected, baos.toString(UTF_8.name()));
   }
 
   @Test
@@ -2393,14 +2346,13 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
-    ResponseMock responseMock = new ResponseMock();
+    RecordingResponse response = new RecordingResponse();
     adaptor.doAcl(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/DocumentName:3000")),
-        documentNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
+        documentNode, response);
     assertEquals(
         Sets.newHashSet(newUserPrincipal(owner.getName())),
-        responseMock.getAcl().getPermits());
+        response.getAcl().getPermits());
   }
 
   @Test
@@ -2418,14 +2370,13 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
-    ResponseMock responseMock = new ResponseMock();
+    RecordingResponse response = new RecordingResponse();
     adaptor.doAcl(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/DocumentName:3000")),
-        documentNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
+        documentNode, response);
     assertEquals(
         Sets.newHashSet(newGroupPrincipal(ownerGroup.getName())),
-        responseMock.getAcl().getPermits());
+        response.getAcl().getPermits());
   }
 
   @Test
@@ -2441,14 +2392,13 @@ public class OpentextAdaptorTest {
     Config config = initConfig(adaptor, context);
     config.overrideKey("opentext.publicAccessGroupEnabled", "true");
     adaptor.init(context);
-    ResponseMock responseMock = new ResponseMock();
+    RecordingResponse response = new RecordingResponse();
     adaptor.doAcl(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/DocumentName:3000")),
-        documentNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
+        documentNode, response);
     assertEquals(
         Sets.newHashSet(newGroupPrincipal("[Public Access]")),
-        responseMock.getAcl().getPermits());
+        response.getAcl().getPermits());
   }
 
   @Test
@@ -2468,11 +2418,10 @@ public class OpentextAdaptorTest {
     Config config = initConfig(adaptor, context);
     config.overrideKey("opentext.publicAccessGroupEnabled", "false");
     adaptor.init(context);
-    ResponseMock responseMock = new ResponseMock();
+    RecordingResponse response = new RecordingResponse();
     adaptor.doAcl(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/DocumentName:3000")),
-        documentNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
+        documentNode, response);
   }
 
   @Test
@@ -2489,14 +2438,13 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
-    ResponseMock responseMock = new ResponseMock();
+    RecordingResponse response = new RecordingResponse();
     adaptor.doAcl(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/DocumentName:3000")),
-        documentNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
+        documentNode, response);
     assertEquals(
         Sets.newHashSet(newUserPrincipal(aclUser.getName())),
-        responseMock.getAcl().getPermits());
+        response.getAcl().getPermits());
   }
 
   /**
@@ -2551,16 +2499,15 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
-    ResponseMock responseMock = new ResponseMock();
+    RecordingResponse response = new RecordingResponse();
     adaptor.doAcl(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/DocumentName:3000")),
-        documentNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
+        documentNode, response);
     assertEquals(
         Sets.newHashSet(newUserPrincipal(owner.getName()),
             newUserPrincipal(guestUser.getName()),
             newGroupPrincipal(ownerGroup.getName())),
-        responseMock.getAcl().getPermits());;
+        response.getAcl().getPermits());;
   }
 
   @Test
@@ -2578,11 +2525,10 @@ public class OpentextAdaptorTest {
     soapFactory.documentManagementMock
         .setNodeRights(documentNode.getID(), nodeRights);
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
-    ResponseMock responseMock = new ResponseMock();
+    RecordingResponse response = new RecordingResponse();
     adaptor.doAcl(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/DocumentName:3000")),
-        documentNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
+        documentNode, response);
   }
 
   @Test
@@ -2609,11 +2555,10 @@ public class OpentextAdaptorTest {
     // just get the error there; we want to trigger it in doAcl
     // to verify that the exception's rethrown.
     soapFactory.authenticationMock = new AuthenticationMockError();
-    ResponseMock responseMock = new ResponseMock();
+    RecordingResponse response = new RecordingResponse();
     adaptor.doAcl(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/DocumentName:3000")),
-        documentNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
+        documentNode, response);
   }
 
   @Test
@@ -2631,11 +2576,10 @@ public class OpentextAdaptorTest {
     soapFactory.documentManagementMock = new DocumentManagementMockError();
     NodeMock documentNode = new NodeMock(3000, "DocumentName", "Document");
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
-    ResponseMock responseMock = new ResponseMock();
+    RecordingResponse response = new RecordingResponse();
     adaptor.doAcl(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/DocumentName:3000")),
-        documentNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
+        documentNode, response);
   }
 
   @Test
@@ -2659,11 +2603,10 @@ public class OpentextAdaptorTest {
     soapFactory.memberServiceMock = new MemberServiceMockError();
     soapFactory.memberServiceMock.addMember(member);
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
-    ResponseMock responseMock = new ResponseMock();
+    RecordingResponse response = new RecordingResponse();
     adaptor.doAcl(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/DocumentName:3000")),
-        documentNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
+        documentNode, response);
   }
 
   @Test
@@ -2692,11 +2635,10 @@ public class OpentextAdaptorTest {
     soapFactory.memberServiceMock = new MemberServiceMockError();
     soapFactory.memberServiceMock.addMember(member);
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
-    ResponseMock responseMock = new ResponseMock();
+    RecordingResponse response = new RecordingResponse();
     adaptor.doAcl(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/DocumentName:3000")),
-        documentNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
+        documentNode, response);
   }
 
   @Test
@@ -2720,14 +2662,13 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
-    ResponseMock responseMock = new ResponseMock();
+    RecordingResponse response = new RecordingResponse();
     adaptor.doAcl(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/DocumentName:3000")),
-        documentNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
+        documentNode, response);
     assertEquals(
         Sets.newHashSet(newUserPrincipal(active.getName())),
-        responseMock.getAcl().getPermits());
+        response.getAcl().getPermits());
   }
 
   @Test
@@ -2749,14 +2690,13 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
-    ResponseMock responseMock = new ResponseMock();
+    RecordingResponse response = new RecordingResponse();
     adaptor.doAcl(soapFactory.newDocumentManagement("token"),
         new OpentextDocId(new DocId("2000/DocumentName:3000")),
-        documentNode,
-        Proxies.newProxyInstance(Response.class, responseMock));
+        documentNode, response);
     assertEquals(
         Sets.newHashSet(newUserPrincipal(active.getName())),
-        responseMock.getAcl().getPermits());
+        response.getAcl().getPermits());
   }
 
   @Test
@@ -3165,26 +3105,22 @@ public class OpentextAdaptorTest {
     soapFactory.documentManagementMock.addCategoryDefinition(
         definition);
 
-    RequestMock requestMock = new RequestMock(docId);
-    Request request = Proxies.newProxyInstance(Request.class, requestMock);
-    ResponseMock responseMock = new ResponseMock();
+    Request request = new RequestMock(docId);
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    RecordingResponse response = new RecordingResponse(baos);
     adaptor.doEmail(soapFactory.newDocumentManagement("token"),
-        testDocId, emailNode,
-        Proxies.newProxyInstance(Request.class, requestMock),
-        Proxies.newProxyInstance(Response.class, responseMock));
-    Map<String, List<String>> responseMetadata = responseMock.getMetadata();
-    assertEquals(Lists.newArrayList("to@example.com"),
-        responseMetadata.get("To"));
-    assertEquals(Lists.newArrayList("from@example.com"),
-        responseMetadata.get("From"));
-    assertEquals(Lists.newArrayList("Message Subject"),
-        responseMetadata.get("Subject"));
-    assertEquals(Lists.newArrayList("from@example.com"),
-        responseMetadata.get("Email Address")); // From Participants table
+        testDocId, emailNode, request, response);
+    assertEquals(
+        expectedMetadata(
+            ImmutableMap.of(
+                "To", "to@example.com",
+                "From", "from@example.com",
+                "Subject", "Message Subject",
+                "Email Address", "from@example.com")),
+        response.getMetadata());
     // Check that the node version content was also sent.
-    assertEquals("application/vnd.ms-outlook", responseMock.contentType);
-    assertEquals("this is the content",
-        responseMock.outputStream.toString("UTF-8"));
+    assertEquals("application/vnd.ms-outlook", response.getContentType());
+    assertEquals("this is the content", baos.toString(UTF_8.name()));
   }
 
   @Test
@@ -3576,15 +3512,14 @@ public class OpentextAdaptorTest {
       config.overrideKey("opentext.src", "1234, 56780, 12341");
       adaptor.init(context);
 
-      DocIdPusherMock docIdPusherMock = new DocIdPusherMock();
-      adaptor.getModifiedDocIds(
-          Proxies.newProxyInstance(DocIdPusher.class, docIdPusherMock));
+      RecordingDocIdPusher pusher = new RecordingDocIdPusher();
+      adaptor.getModifiedDocIds(pusher);
       assertEquals(Lists.newArrayList(
               new DocId("1234/Project+1/Document+in+Project:9012"),
               new DocId("56780/Document+2:90120"),
               new DocId("12341/Document+3:56781"),
               new DocId("1234/Project+1/URL+in+Project:90123")),
-          docIdPusherMock.docIds);
+          pusher.getDocIds());
     } finally {
       server.stop(0);
     }
@@ -3604,10 +3539,9 @@ public class OpentextAdaptorTest {
       config.overrideKey("opentext.src", "1234, 56780, 12341");
       adaptor.init(context);
 
-      DocIdPusherMock docIdPusherMock = new DocIdPusherMock();
-      adaptor.getModifiedDocIds(
-          Proxies.newProxyInstance(DocIdPusher.class, docIdPusherMock));
-      assertEquals(Lists.newArrayList(), docIdPusherMock.docIds);
+      RecordingDocIdPusher pusher = new RecordingDocIdPusher();
+      adaptor.getModifiedDocIds(pusher);
+      assertEquals(Lists.newArrayList(), pusher.getDocIds());
     } finally {
       server.stop(0);
     }
@@ -3656,12 +3590,11 @@ public class OpentextAdaptorTest {
       NodeMock node = new NodeMock(9012, "Document in Project", "Document");
       node.setModifyDate(2013, 3, 1, 4, 34, 21);
       soapFactory.documentManagementMock.addNode(node);
-      DocIdPusherMock docIdPusherMock = new DocIdPusherMock();
-      adaptor.getModifiedDocIds(
-          Proxies.newProxyInstance(DocIdPusher.class, docIdPusherMock));
+      RecordingDocIdPusher pusher = new RecordingDocIdPusher();
+      adaptor.getModifiedDocIds(pusher);
       assertEquals(Lists.newArrayList(
               new DocId("1234/Project+1/Document+in+Project:9012")),
-          docIdPusherMock.docIds);
+          pusher.getDocIds());
 
       // Check that the adaptor stored the last modified
       // date/time for the last item in the search results and
@@ -3876,22 +3809,6 @@ public class OpentextAdaptorTest {
     } catch (SOAPException soapException) {
       throw new RuntimeException("Failed to create SOAPFaultException",
           soapException);
-    }
-  }
-
-  private class DocIdPusherMock {
-    private List<DocId> docIds;
-    private Map<GroupPrincipal, List<Principal>> groupDefinitions;
-
-    public DocId pushDocIds(Iterable<DocId> docIds) {
-      this.docIds = Lists.newArrayList(docIds);
-      return null;
-    }
-
-    public void pushGroupDefinitions(
-        Map<GroupPrincipal, List<Principal>> groupDefinitions,
-        boolean caseSensitive) {
-      this.groupDefinitions = groupDefinitions;
     }
   }
 
@@ -4428,9 +4345,13 @@ public class OpentextAdaptorTest {
     }
   }
 
-  private class RequestMock {
+  private class RequestMock implements Request {
     private DocId docId;
     private Date lastAccessTime;
+
+    RequestMock(String id) {
+      this(new DocId(id));
+    }
 
     RequestMock(DocId docId) {
       this.docId = docId;
@@ -4441,100 +4362,25 @@ public class OpentextAdaptorTest {
       this.lastAccessTime = lastAccessTime;
     }
 
+    @Override
     public boolean canRespondWithNoContent(Date lastModified) {
       return !hasChangedSinceLastAccess(lastModified);
     }
 
+    @Override
     public DocId getDocId() {
       return this.docId;
     }
 
+    @Override
     public Date getLastAccessTime() {
       return this.lastAccessTime;
     }
 
+    @Override
     public boolean hasChangedSinceLastAccess(Date lastModified) {
       return (lastAccessTime == null || lastModified == null) ? true
           : lastModified.after(lastAccessTime);
-    }
-  }
-
-  private class ResponseMock {
-    private ByteArrayOutputStream outputStream;
-    private String contentType;
-    private Date lastModified;
-    private URI displayUrl;
-    private boolean noContent = false;
-    private boolean notFound = false;
-    private Map<String, List<String>> metadata =
-        new HashMap<String, List<String>>();
-    private List<String> anchors = new ArrayList<String>();
-    private Acl acl;
-    private boolean noIndex;
-
-    ResponseMock() {
-      this.outputStream = new ByteArrayOutputStream();
-    }
-
-    public OutputStream getOutputStream() {
-      return outputStream;
-    }
-
-    public void setContentType(String contentType) {
-      this.contentType = contentType;
-    }
-
-    public void setLastModified(Date lastModified) {
-      this.lastModified = lastModified;
-    }
-
-    public void setDisplayUrl(URI displayUrl) {
-      this.displayUrl = displayUrl;
-    }
-
-    public void respondNoContent() {
-      this.noContent = true;
-    }
-
-    public void respondNotFound() {
-      this.notFound = true;
-    }
-
-    public void addMetadata(String name, String value) {
-      List<String> values = this.metadata.get(name);
-      if (values == null) {
-        values = new ArrayList<String>();
-        this.metadata.put(name, values);
-      }
-      values.add(value);
-    }
-
-    public void addAnchor(URI uri, String text) {
-      this.anchors.add(text);
-    }
-
-    public void setAcl(Acl acl) {
-      this.acl = acl;
-    }
-
-    public void setNoIndex(boolean noIndex) {
-      this.noIndex = noIndex;
-    }
-
-    private boolean notFound() {
-      return this.notFound;
-    }
-
-    private Map<String, List<String>> getMetadata() {
-      return this.metadata;
-    }
-
-    private List<String> getAnchors() {
-      return this.anchors;
-    }
-
-    private Acl getAcl() {
-      return this.acl;
     }
   }
 
