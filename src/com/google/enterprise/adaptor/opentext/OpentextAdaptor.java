@@ -782,7 +782,7 @@ public class OpentextAdaptor extends AbstractAdaptor
       return new UserPrincipal(name, this.globalNamespace);
     }
     if (Strings.isNullOrEmpty(this.windowsDomain)) {
-      return new UserPrincipal(name, this.localNamespace);
+      return new UserPrincipal(name, this.globalNamespace);
     } else {
       return new UserPrincipal(
           windowsDomain + "\\" + name, this.globalNamespace);

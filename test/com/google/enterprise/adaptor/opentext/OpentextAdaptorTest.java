@@ -2934,7 +2934,7 @@ public class OpentextAdaptorTest {
 
     // unqualified username, no windowsDomain
     testMember.setName("user1");
-    assertEquals(new UserPrincipal("user1", LOCAL_NAMESPACE),
+    assertEquals(new UserPrincipal("user1", GLOBAL_NAMESPACE),
         adaptor.getUserPrincipal(testMember));
 
     // qualified username, no windowsDomain
@@ -4444,7 +4444,7 @@ public class OpentextAdaptorTest {
   }
 
   private UserPrincipal newUserPrincipal(String name) {
-    return new UserPrincipal(name, LOCAL_NAMESPACE);
+    return new UserPrincipal(name, GLOBAL_NAMESPACE);
   }
 
   private GroupPrincipal newGroupPrincipal(String name) {
