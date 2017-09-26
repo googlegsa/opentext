@@ -169,6 +169,7 @@ public class OpentextAdaptor extends AbstractAdaptor
   private String windowsDomain;
   private String globalNamespace;
   private String localNamespace;
+  private boolean pushLocalGroupsOnly;
   /** Configured start points, with unknown values removed. */
   private List<StartPoint> startPoints;
   private String contentServerUrl;
@@ -241,6 +242,7 @@ public class OpentextAdaptor extends AbstractAdaptor
     config.addKey("opentext.publicAccessGroupEnabled", "false");
     config.addKey("opentext.windowsDomain", "");
     config.addKey("adaptor.namespace", Principal.DEFAULT_NAMESPACE);
+    config.addKey("opentext.pushLocalGroupsOnly", "false");
     config.addKey("opentext.src", "EnterpriseWS");
     config.addKey("opentext.src.separator", ",");
     config.addKey("opentext.displayUrl.contentServerUrl", null);
@@ -500,6 +502,11 @@ public class OpentextAdaptor extends AbstractAdaptor
       this.localNamespace =
           getLocalNamespace(this.globalNamespace, this.contentServerUrl);
       log.log(Level.CONFIG, "local namespace: {0}", this.localNamespace);
+      String pushLocalGroupsOnly =
+          config.getValue("opentext.pushLocalGroupsOnly");
+      log.log(Level.CONFIG,
+          "opentext.pushLocalGroupsOnly: {0}", pushLocalGroupsOnly);
+      this.pushLocalGroupsOnly = Boolean.parseBoolean(pushLocalGroupsOnly);
     }
 
     // excludedNodeTypes may override the value for indexFolders,
@@ -701,6 +708,12 @@ public class OpentextAdaptor extends AbstractAdaptor
           log.log(Level.FINEST, "Is not active: " + group.getName());
           continue;
         }
+        GroupPrincipal groupPrincipal = getGroupPrincipal(group);
+        if (this.pushLocalGroupsOnly
+            && groupPrincipal.getNamespace().equals(this.globalNamespace)) {
+          log.log(Level.FINER, "Skipping global group {0}", group.getName());
+          continue;
+        }
         List<Member> members = memberService.listMembers(group.getID());
         List<Principal> memberPrincipals = new ArrayList<Principal>();
         for (Member member : members) {
@@ -719,7 +732,7 @@ public class OpentextAdaptor extends AbstractAdaptor
         if (memberPrincipals.size() > 0) {
           log.log(Level.FINEST, "Adding group {0}: {1}",
               new Object[] { group.getName(), memberPrincipals });
-          groupDefinitions.put(getGroupPrincipal(group), memberPrincipals);
+          groupDefinitions.put(groupPrincipal, memberPrincipals);
         }
       }
       handle = results.getPageHandle();

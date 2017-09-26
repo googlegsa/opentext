@@ -52,6 +52,10 @@ opentext.publicAccessGroupEnabled = true|false
 # in the system. Default is empty “”.
 # opentext.windowsDomain =
 
+# When opentext.pushLocalGroupsOnly value is set to true, only
+# local groups are pushed to GSA.
+# opentext.pushLocalGroupsOnly = false
+
 # List of node types to exclude; no content will be sent for
 # these types. If the type is a container, its contents will not
 # be indexed. If a type is one of the following, you must specify

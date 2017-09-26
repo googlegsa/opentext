@@ -3025,6 +3025,45 @@ public class OpentextAdaptorTest {
   }
 
   @Test
+  public void testSendLocalGroupsOnly() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.memberServiceMock.addMember(
+        getMember(1001, "user1", "User"));
+    soapFactory.memberServiceMock.addMember(
+        getMember(1002, "user2", "User"));
+    soapFactory.memberServiceMock.addMember(
+        getMember(2001, "localgroup", "Group"));
+    soapFactory.memberServiceMock.addMember(
+        getMember(2002, "domain\\globalgroup", "Group"));
+    soapFactory.memberServiceMock.addMemberToGroup(
+        2001, soapFactory.memberServiceMock.getMemberById(1001));
+    soapFactory.memberServiceMock.addMemberToGroup(
+        2002, soapFactory.memberServiceMock.getMemberById(1002));
+    GroupPrincipal globalGroupPrincipal =
+        new GroupPrincipal("domain\\globalgroup", GLOBAL_NAMESPACE);
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+
+    // pushLocalGroupsOnly = false
+    adaptor.init(context);
+    Map<GroupPrincipal, List<Principal>> groupDefinitions =
+        adaptor.getGroups(soapFactory.newMemberService());
+    assertEquals(2, groupDefinitions.size());
+    assertEquals("expected globalgroup",
+        Lists.newArrayList(new UserPrincipal("user2", GLOBAL_NAMESPACE)),
+        groupDefinitions.get(globalGroupPrincipal));
+
+    // pushLocalGroupsOnly = true
+    config.overrideKey("opentext.pushLocalGroupsOnly", "true");
+    adaptor.init(context);
+    groupDefinitions = adaptor.getGroups(soapFactory.newMemberService());
+    assertEquals(1, groupDefinitions.size());
+    assertNull("unexpected globalgroup",
+        groupDefinitions.get(globalGroupPrincipal));
+  }
+
+  @Test
   public void testDoEmail() throws IOException {
     // Create the definition.
     AttributeGroupDefinition definition = new AttributeGroupDefinition();
