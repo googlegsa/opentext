@@ -2355,6 +2355,10 @@ public class OpentextAdaptor extends AbstractAdaptor
         if (!Strings.isNullOrEmpty(mimeType)) {
           response.addMetadata("MimeType", mimeType);
         }
+        Long dataSize = versionInfo.getFileDataSize();
+        if (dataSize != null) {
+          response.addMetadata("DataSize", dataSize.toString());
+        }
       }
     }
   }

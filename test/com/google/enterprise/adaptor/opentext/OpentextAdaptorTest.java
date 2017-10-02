@@ -1716,6 +1716,7 @@ public class OpentextAdaptorTest {
     node.setVolumeID(new Long(-321));
     NodeVersionInfo versionInfo = new NodeVersionInfo();
     versionInfo.setMimeType("test/mime-type");
+    versionInfo.setFileDataSize(1024L);
     node.setVersionInfo(versionInfo);
 
     RecordingResponse response = new RecordingResponse();
@@ -1734,6 +1735,7 @@ public class OpentextAdaptorTest {
             .put("DisplayType", "Node Display Type")
             .put("VolumeID", "-321")
             .put("MimeType", "test/mime-type")
+            .put("DataSize", "1024")
             .build()),
         response.getMetadata());
     assertEquals(node.getModifyDate().toGregorianCalendar().getTime(),
