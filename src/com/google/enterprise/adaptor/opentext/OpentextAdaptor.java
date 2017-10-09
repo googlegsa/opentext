@@ -2565,7 +2565,7 @@ public class OpentextAdaptor extends AbstractAdaptor
       return getAuthenticationToken((BindingProvider) documentManagement);
     }
 
-
+    @SuppressWarnings("rawtypes") // Binding.getHandlerChain uses raw types.
     private String getAuthenticationToken(BindingProvider bindingProvider) {
       List<Handler> chain = bindingProvider.getBinding().getHandlerChain();
       for (Handler handler : chain) {
@@ -2576,6 +2576,7 @@ public class OpentextAdaptor extends AbstractAdaptor
       throw new RuntimeException("Missing authentication handler");
     }
 
+    @SuppressWarnings("rawtypes") // Binding.setHandlerChain uses raw types.
     private void setAuthenticationHandler(BindingProvider bindingProvider,
         String authenticationToken) {
       Handler handler = new AuthenticationHandler(authenticationToken);

@@ -109,12 +109,12 @@ class AuthenticationHandler implements SOAPHandler<SOAPMessageContext> {
       try {
         SOAPHeader header = message.getSOAPHeader();
         if (header != null) {
-          Iterator headerElements = header.getChildElements(
+          Iterator<?> headerElements = header.getChildElements(
               AuthenticationHandler.authenticationHeaderName);
           if (headerElements.hasNext()) {
             SOAPHeaderElement headerElement =
                 (SOAPHeaderElement) headerElements.next();
-            Iterator childElements = headerElement.getChildElements(
+            Iterator<?> childElements = headerElement.getChildElements(
                 AuthenticationHandler.authenticationTokenName);
             if (childElements.hasNext()) {
               SOAPElement child = (SOAPElement) childElements.next();

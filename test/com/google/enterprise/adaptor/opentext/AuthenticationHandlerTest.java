@@ -95,12 +95,12 @@ public class AuthenticationHandlerTest {
 
   private void assertAuthenticationHeaderEquals(String authenticationToken,
       SOAPHeader header) {
-    Iterator headerElements = header.getChildElements(
+    Iterator<?> headerElements = header.getChildElements(
         AuthenticationHandler.authenticationHeaderName);
     assertTrue(headerElements.hasNext());
     SOAPHeaderElement headerElement =
         (SOAPHeaderElement) headerElements.next();
-    Iterator childElements = headerElement.getChildElements(
+    Iterator<?> childElements = headerElement.getChildElements(
         AuthenticationHandler.authenticationTokenName);
     assertTrue(childElements.hasNext());
     SOAPElement child = (SOAPElement) childElements.next();
