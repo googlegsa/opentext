@@ -26,12 +26,15 @@
   <property name="compile.java.version" value="7"/>
   <property name="compile.java.bootclasspath"
             value="${build.bootclasspath}"/>
-  
+  <!-- The build.bootclasspath property, if set, must match the Java version
+       set in compile.java.version. To detect errors in build.bootclasspath,
+       set compile.java.newerClassname to a class that was added in
+       the immediately following release of Java. For example, for
+       "7", pick a class added in Java 8. -->
+  <property name="compile.java.newerClassname"
+    value="java.lang.FunctionalInterface"/>
+
   <path id="adaptor.build.classpath">
-<!--
-    <fileset dir="${lib.dir}">
-    </fileset>
--->
     <pathelement location="${adaptor.jar}"/>
     <pathelement location="${build-generate.dir}"/>
   </path>
@@ -199,7 +202,17 @@ lib/plexi submodule or add the the command line argument
     </copy>
   </target>
 
-  <target name="-real-build" depends="-plexi-build,-generate">
+  <target name="-check-jdk">
+    <!-- Make sure that the build.bootclasspath isn't newer than expected. -->
+    <available property="compile.java.isNewer"
+      classname="${compile.java.newerClassname}"
+      classpath="${compile.java.bootclasspath}" ignoresystemclasses="true"/>
+    <fail if="compile.java.isNewer">
+      Error: build.bootclasspath is newer than JDK ${compile.java.version}.
+    </fail>
+  </target>
+
+  <target name="-real-build" depends="-plexi-build,-check-jdk,-generate">
     <mkdir dir="${build-src.dir}"/>
 
     <javac srcdir="${src.dir}" destdir="${build-src.dir}" debug="true"
