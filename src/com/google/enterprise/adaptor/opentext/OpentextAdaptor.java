@@ -657,134 +657,174 @@ public class OpentextAdaptor extends AbstractAdaptor
     if (!this.markAllDocsAsPublic) {
       MemberService memberService =
           this.soapFactory.newMemberService(documentManagement);
-      Map<GroupPrincipal, List<Principal>> groupDefinitions =
-          getGroups(memberService);
-      if (this.publicAccessGroupEnabled) {
-        List<Principal> publicAccessGroup = getPublicAccessGroup(memberService);
-        if (publicAccessGroup.size() > 0) {
-          groupDefinitions.put(
-              new GroupPrincipal("[Public Access]", this.localNamespace),
-              publicAccessGroup);
+      SOAPFaultException groupsException = null;
+      Groups groups = new Groups(memberService);
+      try {
+        groups.addGroups();
+        if (this.publicAccessGroupEnabled) {
+          groups.addPublicAccessGroup("[Public Access]", this.localNamespace);
         }
+      } catch (SOAPFaultException e) {
+        groupsException = e;
+        log.log(Level.WARNING, "Error while reading groups", e);
       }
+
+      // If some groups were found, push them; otherwise, if an
+      // exception was thrown, rethrow it as before.
+      Map<GroupPrincipal, List<Principal>> groupDefinitions =
+          groups.getGroupDefinitions();
       if (groupDefinitions.size() > 0) {
-        pusher.pushGroupDefinitions(groupDefinitions, true);
+        DocIdPusher.FeedType feedType = DocIdPusher.FeedType.FULL;
+        if (groups.isPartialResults() || groupsException != null) {
+          feedType = DocIdPusher.FeedType.INCREMENTAL;
+          log.log(Level.FINE, "Sending partial groups results");
+        }
+        pusher.pushGroupDefinitions(groupDefinitions,
+            /* case sensitive */ true, feedType,
+            /* group source */ null, /* exception handler */ null);
+      } else if (groupsException != null) {
+        throw groupsException;
       }
     }
   }
 
   @VisibleForTesting
-  Map<GroupPrincipal, List<Principal>> getGroups(MemberService memberService) {
-    Map<GroupPrincipal, List<Principal>> groupDefinitions =
-        new HashMap<GroupPrincipal, List<Principal>>();
-    MemberSearchOptions options = new MemberSearchOptions();
-    options.setFilter(SearchFilter.GROUP);
-    options.setColumn(SearchColumn.NAME);
-    options.setMatching(SearchMatching.STARTSWITH);
-    options.setSearch(""); // Empty string matches everything.
-    options.setScope(SearchScope.SYSTEM);
-    options.setPageSize(50);
-    PageHandle handle = memberService.searchForMembers(options);
-    if (handle == null) {
-      log.log(Level.WARNING, "No groups found");
+  class Groups {
+    private final MemberService memberService;
+    private final Map<GroupPrincipal, List<Principal>> groupDefinitions;
+    private boolean isPartialResults;
+
+    Groups(MemberService memberService) {
+      this.memberService = memberService;
+      groupDefinitions = new HashMap<GroupPrincipal, List<Principal>>();
+    }
+
+    Map<GroupPrincipal, List<Principal>> getGroupDefinitions() {
       return groupDefinitions;
     }
-    while (!handle.isFinalPage()) {
-      MemberSearchResults results = memberService.getSearchResults(handle);
-      if (results == null) {
-        log.log(Level.WARNING,
-            "getGroups: Search results from page handle were null");
-        break;
+
+    boolean isPartialResults() {
+      return isPartialResults;
+    }
+
+    void addGroups() throws SOAPFaultException {
+      MemberSearchOptions options = new MemberSearchOptions();
+      options.setFilter(SearchFilter.GROUP);
+      options.setColumn(SearchColumn.NAME);
+      options.setMatching(SearchMatching.STARTSWITH);
+      options.setSearch(""); // Empty string matches everything.
+      options.setScope(SearchScope.SYSTEM);
+      options.setPageSize(50);
+      PageHandle handle = memberService.searchForMembers(options);
+      if (handle == null) {
+        isPartialResults = true;
+        log.log(Level.WARNING, "No groups found");
+        return;
       }
-      List<Member> groups = results.getMembers();
-      if (groups == null) {
-        log.log(Level.WARNING, "No members found in search results");
-        break;
-      }
-      log.log(Level.FINE, "Processing " + groups.size() + " groups");
-      for (Member group : groups) {
-        log.log(Level.FINER, "Processing group: " + group.getName());
-        if (!isActive(group)) {
-          log.log(Level.FINEST, "Is not active: " + group.getName());
-          continue;
+      while (!handle.isFinalPage()) {
+        MemberSearchResults results = memberService.getSearchResults(handle);
+        if (results == null) {
+          isPartialResults = true;
+          log.log(Level.WARNING,
+              "getGroups: Search results from page handle were null");
+          break;
         }
-        GroupPrincipal groupPrincipal = getGroupPrincipal(group);
-        if (this.pushLocalGroupsOnly
-            && groupPrincipal.getNamespace().equals(this.globalNamespace)) {
-          log.log(Level.FINER, "Skipping global group {0}", group.getName());
-          continue;
+        List<Member> groups = results.getMembers();
+        if (groups == null) {
+          isPartialResults = true;
+          log.log(Level.WARNING, "No members found in search results");
+          break;
         }
-        List<Member> members = memberService.listMembers(group.getID());
-        List<Principal> memberPrincipals = new ArrayList<Principal>();
-        for (Member member : members) {
-          if (!isActive(member)) {
-            log.log(Level.FINEST, "Is not active: " + member.getName());
+        log.log(Level.FINE, "Processing " + groups.size() + " groups");
+        for (Member group : groups) {
+          log.log(Level.FINER, "Processing group: " + group.getName());
+          if (!isActive(group)) {
+            log.log(Level.FINEST, "Is not active: " + group.getName());
             continue;
           }
-          if ("User".equals(member.getType())) {
-            memberPrincipals.add(getUserPrincipal(member));
-          } else if ("Group".equals(member.getType())) {
-            memberPrincipals.add(getGroupPrincipal(member));
+          GroupPrincipal groupPrincipal = getGroupPrincipal(group);
+          if (pushLocalGroupsOnly
+              && groupPrincipal.getNamespace().equals(globalNamespace)) {
+            log.log(Level.FINER, "Skipping global group {0}", group.getName());
+            continue;
+          }
+          List<Member> members = memberService.listMembers(group.getID());
+          List<Principal> memberPrincipals = new ArrayList<Principal>();
+          for (Member member : members) {
+            if (!isActive(member)) {
+              log.log(Level.FINEST, "Is not active: " + member.getName());
+              continue;
+            }
+            if ("User".equals(member.getType())) {
+              memberPrincipals.add(getUserPrincipal(member));
+            } else if ("Group".equals(member.getType())) {
+              memberPrincipals.add(getGroupPrincipal(member));
+            }
+          }
+          log.log(Level.FINER,
+              "Size of " + group.getName() + ": " + memberPrincipals.size());
+          if (memberPrincipals.size() > 0) {
+            log.log(Level.FINEST, "Adding group {0}: {1}",
+                new Object[] { group.getName(), memberPrincipals });
+            groupDefinitions.put(groupPrincipal, memberPrincipals);
           }
         }
-        log.log(Level.FINER,
-            "Size of " + group.getName() + ": " + memberPrincipals.size());
-        if (memberPrincipals.size() > 0) {
-          log.log(Level.FINEST, "Adding group {0}: {1}",
-              new Object[] { group.getName(), memberPrincipals });
-          groupDefinitions.put(groupPrincipal, memberPrincipals);
-        }
+        handle = results.getPageHandle();
       }
-      handle = results.getPageHandle();
     }
-    return groupDefinitions;
-  }
 
-  @VisibleForTesting
-  List<Principal> getPublicAccessGroup(MemberService memberService) {
-    List<Principal> publicAccessGroup = new ArrayList<Principal>();
-    MemberSearchOptions options = new MemberSearchOptions();
-    options.setFilter(SearchFilter.USER);
-    options.setColumn(SearchColumn.NAME);
-    options.setMatching(SearchMatching.STARTSWITH);
-    options.setSearch(""); // Empty string matches everything.
-    options.setScope(SearchScope.SYSTEM);
-    options.setPageSize(50);
-    PageHandle handle = memberService.searchForMembers(options);
-    if (handle == null) {
-      log.log(Level.WARNING, "No users found");
-      return publicAccessGroup;
+    @VisibleForTesting
+    void addPublicAccessGroup(String groupName, String namespace)
+        throws SOAPFaultException {
+      List<Principal> publicAccessGroup = new ArrayList<Principal>();
+      MemberSearchOptions options = new MemberSearchOptions();
+      options.setFilter(SearchFilter.USER);
+      options.setColumn(SearchColumn.NAME);
+      options.setMatching(SearchMatching.STARTSWITH);
+      options.setSearch(""); // Empty string matches everything.
+      options.setScope(SearchScope.SYSTEM);
+      options.setPageSize(50);
+      PageHandle handle = memberService.searchForMembers(options);
+      if (handle == null) {
+        isPartialResults = true;
+        log.log(Level.WARNING, "No users found");
+        return;
+      }
+      while (!handle.isFinalPage()) {
+        MemberSearchResults results = memberService.getSearchResults(handle);
+        if (results == null) {
+          isPartialResults = true;
+          log.log(Level.WARNING, "getPublicAccessGroup: "
+              + "Search results from page handle were null");
+          break;
+        }
+        List<Member> users = results.getMembers();
+        if (users == null) {
+          isPartialResults = true;
+          log.log(Level.WARNING, "No members found in search results");
+          break;
+        }
+        for (Member user : users) {
+          if (!(user instanceof User)) { // Just check before casting.
+            continue;
+          }
+          if (!isActive(user)) {
+            log.log(Level.FINEST, "Is not active: " + user.getName());
+            continue;
+          }
+          MemberPrivileges memberPrivileges = ((User) user).getPrivileges();
+          if (memberPrivileges.isPublicAccessEnabled()) {
+            publicAccessGroup.add(getUserPrincipal(user));
+          }
+        }
+        handle = results.getPageHandle();
+      }
+      log.log(Level.FINER,
+          "Size of [Public Access] group: " + publicAccessGroup.size());
+
+      groupDefinitions.put(
+          new GroupPrincipal(groupName, namespace), publicAccessGroup);
     }
-    while (!handle.isFinalPage()) {
-      MemberSearchResults results = memberService.getSearchResults(handle);
-      if (results == null) {
-        log.log(Level.WARNING,
-            "getPublicAccessGroup: Search results from page handle were null");
-        break;
-      }
-      List<Member> users = results.getMembers();
-      if (users == null) {
-        log.log(Level.WARNING, "No members found in search results");
-        break;
-      }
-      for (Member user : users) {
-        if (!(user instanceof User)) { // Just check before casting.
-          continue;
-        }
-        if (!isActive(user)) {
-          log.log(Level.FINEST, "Is not active: " + user.getName());
-          continue;
-        }
-        MemberPrivileges memberPrivileges = ((User) user).getPrivileges();
-        if (memberPrivileges.isPublicAccessEnabled()) {
-          publicAccessGroup.add(getUserPrincipal(user));
-        }
-      }
-      handle = results.getPageHandle();
-    }
-    log.log(Level.FINER,
-        "Size of [Public Access] group: " + publicAccessGroup.size());
-    return publicAccessGroup;
   }
 
   @VisibleForTesting

@@ -34,6 +34,8 @@ import com.google.enterprise.adaptor.Acl;
 import com.google.enterprise.adaptor.AdaptorContext;
 import com.google.enterprise.adaptor.Config;
 import com.google.enterprise.adaptor.DocId;
+import com.google.enterprise.adaptor.DocIdPusher;
+import com.google.enterprise.adaptor.ExceptionHandler;
 import com.google.enterprise.adaptor.GroupPrincipal;
 import com.google.enterprise.adaptor.IOHelper;
 import com.google.enterprise.adaptor.InvalidConfigurationException;
@@ -107,6 +109,7 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
@@ -2721,8 +2724,12 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
+    OpentextAdaptor.Groups groups =
+        adaptor.new Groups(soapFactory.newMemberService());
+    groups.addGroups();
+    assertFalse(groups.isPartialResults());
     Map<GroupPrincipal, List<Principal>> groupDefinitions =
-        adaptor.getGroups(soapFactory.newMemberService());
+        groups.getGroupDefinitions();
     assertEquals(4, groupDefinitions.size());
     assertEquals(Lists.newArrayList(
             newUserPrincipal("user0"), newUserPrincipal("user1"),
@@ -2770,8 +2777,11 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
+    OpentextAdaptor.Groups groups =
+        adaptor.new Groups(soapFactory.newMemberService());
+    groups.addGroups();
     Map<GroupPrincipal, List<Principal>> groupDefinitions =
-        adaptor.getGroups(soapFactory.newMemberService());
+        groups.getGroupDefinitions();
     assertEquals(2, groupDefinitions.size());
     assertEquals(Lists.newArrayList(
             newUserPrincipal("user0"), newUserPrincipal("user1"),
@@ -2799,8 +2809,11 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
+    OpentextAdaptor.Groups groups =
+        adaptor.new Groups(soapFactory.newMemberService());
+    groups.addGroups();
     Map<GroupPrincipal, List<Principal>> groupDefinitions =
-        adaptor.getGroups(soapFactory.newMemberService());
+        groups.getGroupDefinitions();
     assertEquals(Lists.newArrayList(newUserPrincipal("user1")),
         groupDefinitions.get(newGroupPrincipal("group1")));
   }
@@ -2819,8 +2832,11 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
+    OpentextAdaptor.Groups groups =
+        adaptor.new Groups(soapFactory.newMemberService());
+    groups.addGroups();
     Map<GroupPrincipal, List<Principal>> groupDefinitions =
-        adaptor.getGroups(soapFactory.newMemberService());
+        groups.getGroupDefinitions();
     assertEquals(null, groupDefinitions.get(newGroupPrincipal("group1")));
   }
 
@@ -2841,8 +2857,11 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
+    OpentextAdaptor.Groups groups =
+        adaptor.new Groups(soapFactory.newMemberService());
+    groups.addGroups();
     Map<GroupPrincipal, List<Principal>> groupDefinitions =
-        adaptor.getGroups(soapFactory.newMemberService());
+        groups.getGroupDefinitions();
     assertEquals(Lists.newArrayList(newUserPrincipal("user1")),
         groupDefinitions.get(newGroupPrincipal("group1")));
   }
@@ -2865,8 +2884,11 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
+    OpentextAdaptor.Groups groups =
+        adaptor.new Groups(soapFactory.newMemberService());
+    groups.addGroups();
     Map<GroupPrincipal, List<Principal>> groupDefinitions =
-        adaptor.getGroups(soapFactory.newMemberService());
+        groups.getGroupDefinitions();
     assertEquals(Lists.newArrayList(newUserPrincipal("user1")),
         groupDefinitions.get(newGroupPrincipal("group1")));
   }
@@ -2890,8 +2912,11 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
+    OpentextAdaptor.Groups groups =
+        adaptor.new Groups(soapFactory.newMemberService());
+    groups.addPublicAccessGroup("[Public Access]", LOCAL_NAMESPACE);
     List<Principal> publicAccessGroup =
-        adaptor.getPublicAccessGroup(soapFactory.newMemberService());
+        groups.getGroupDefinitions().get(newGroupPrincipal("[Public Access]"));
     assertEquals(Lists.newArrayList(
             newUserPrincipal("user0"), newUserPrincipal("user2"),
             newUserPrincipal("user4"), newUserPrincipal("user6"),
@@ -2919,10 +2944,124 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
+    OpentextAdaptor.Groups groups =
+        adaptor.new Groups(soapFactory.newMemberService());
+    groups.addPublicAccessGroup("[Public Access]", LOCAL_NAMESPACE);
     List<Principal> publicAccessGroup =
-        adaptor.getPublicAccessGroup(soapFactory.newMemberService());
+        groups.getGroupDefinitions().get(newGroupPrincipal("[Public Access]"));
     assertEquals(Lists.newArrayList(newUserPrincipal("user1")),
         publicAccessGroup);
+  }
+
+  @Test
+  public void testDeletedGroup() throws InterruptedException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    for (int i = 0; i < 20; i++) {
+      soapFactory.memberServiceMock.addMember(
+          getMember(1000 + i, "user" + i, "User"));
+    }
+    for (int i = 0; i < 4; i++) {
+      soapFactory.memberServiceMock.addMember(
+          getMember(2000 + i, "group" + i, "Group"));
+      for (int j = 0; j < 5; j++) {
+        soapFactory.memberServiceMock.addMemberToGroup(
+            2000 + i,
+            soapFactory.memberServiceMock.getMemberById(1000 + (5 * i + j)));
+      }
+    }
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    RecordingDocIdPusher pusher = new RecordingDocIdPusher();
+    adaptor.getDocIds(pusher);
+
+    Map<GroupPrincipal, Collection<Principal>> groupDefinitions =
+        pusher.getGroupDefinitions();
+    assertEquals(4, groupDefinitions.size());
+    assertEquals(Lists.newArrayList(
+            newUserPrincipal("user0"), newUserPrincipal("user1"),
+            newUserPrincipal("user2"), newUserPrincipal("user3"),
+            newUserPrincipal("user4")),
+        groupDefinitions.get(newGroupPrincipal("group0")));
+    assertEquals(Lists.newArrayList(
+            newUserPrincipal("user5"), newUserPrincipal("user6"),
+            newUserPrincipal("user7"), newUserPrincipal("user8"),
+            newUserPrincipal("user9")),
+        groupDefinitions.get(newGroupPrincipal("group1")));
+    assertEquals(Lists.newArrayList(
+            newUserPrincipal("user10"), newUserPrincipal("user11"),
+            newUserPrincipal("user12"), newUserPrincipal("user13"),
+            newUserPrincipal("user14")),
+        groupDefinitions.get(newGroupPrincipal("group2")));
+    assertEquals(Lists.newArrayList(
+            newUserPrincipal("user15"), newUserPrincipal("user16"),
+            newUserPrincipal("user17"), newUserPrincipal("user18"),
+            newUserPrincipal("user19")),
+        groupDefinitions.get(newGroupPrincipal("group3")));
+
+    soapFactory.memberServiceMock.deleteMember(2002);
+    pusher = new RecordingDocIdPusher();
+    adaptor.getDocIds(pusher);
+    groupDefinitions = pusher.getGroupDefinitions();
+    assertEquals(3, groupDefinitions.size());
+    assertEquals(null, groupDefinitions.get(newGroupPrincipal("group2")));
+  }
+
+  @Test
+  public void testGroupsError() throws InterruptedException {
+    class MemberServiceMockError extends MemberServiceMock {
+      boolean called;
+      public MemberSearchResults getSearchResults(PageHandle pageHandle) {
+        if (!called)  {
+          called = true;
+          return new MemberSearchResultsMock((PageHandleMock) pageHandle);
+        }
+        throw getSoapFaultException("MemberService SOAPFaultException",
+            "urn:opentextadaptortest", "Test.MemberServiceException", "ns0");
+      }
+    }
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.memberServiceMock = new MemberServiceMockError();
+    for (int i = 0; i < 20; i++) {
+      soapFactory.memberServiceMock.addMember(
+          getMember(1000 + i, "user" + i, "User"));
+    }
+    // The search uses a page size of 50, and we want to trigger
+    // an exception on the second page in order to get partial
+    // results, so create a bunch of groups.
+    for (int i = 0; i < 64; i++) {
+      soapFactory.memberServiceMock.addMember(
+          getMember(2000 + i, "group" + i, "Group"));
+      soapFactory.memberServiceMock.addMemberToGroup(
+          2000 + i,
+          soapFactory.memberServiceMock.getMemberById(1000 + (i % 20)));
+    }
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+
+    class MyRecordingDocIdPusher extends RecordingDocIdPusher {
+      DocIdPusher.FeedType latestFeedType;
+
+      @Override
+      public GroupPrincipal pushGroupDefinitions(
+          Map<GroupPrincipal, ? extends Collection<Principal>> defs,
+          boolean caseSensitive, FeedType feedType, String sourceName,
+          ExceptionHandler exceptionHandler) throws InterruptedException {
+        this.latestFeedType = feedType;
+        return super.pushGroupDefinitions(
+            defs, caseSensitive, feedType, sourceName, exceptionHandler);
+      }
+    };
+
+    MyRecordingDocIdPusher pusher = new MyRecordingDocIdPusher();
+    adaptor.getDocIds(pusher);
+    Map<GroupPrincipal, Collection<Principal>> groupDefinitions =
+        pusher.getGroupDefinitions();
+    assertEquals(50, groupDefinitions.size());
+    assertEquals(DocIdPusher.FeedType.INCREMENTAL, pusher.latestFeedType);
   }
 
   @Test
@@ -3015,8 +3154,11 @@ public class OpentextAdaptorTest {
     Config config = initConfig(adaptor, context);
     config.overrideKey("opentext.windowsDomain", "testDomain");
     adaptor.init(context);
+    OpentextAdaptor.Groups groups =
+        adaptor.new Groups(soapFactory.newMemberService());
+    groups.addGroups();
     Map<GroupPrincipal, List<Principal>> groupDefinitions =
-        adaptor.getGroups(soapFactory.newMemberService());
+        groups.getGroupDefinitions();
     assertEquals(
         Lists.newArrayList(
             new UserPrincipal("testDomain\\user1", GLOBAL_NAMESPACE),
@@ -3049,8 +3191,11 @@ public class OpentextAdaptorTest {
 
     // pushLocalGroupsOnly = false
     adaptor.init(context);
+    OpentextAdaptor.Groups groups =
+        adaptor.new Groups(soapFactory.newMemberService());
+    groups.addGroups();
     Map<GroupPrincipal, List<Principal>> groupDefinitions =
-        adaptor.getGroups(soapFactory.newMemberService());
+        groups.getGroupDefinitions();
     assertEquals(2, groupDefinitions.size());
     assertEquals("expected globalgroup",
         Lists.newArrayList(new UserPrincipal("user2", GLOBAL_NAMESPACE)),
@@ -3059,7 +3204,9 @@ public class OpentextAdaptorTest {
     // pushLocalGroupsOnly = true
     config.overrideKey("opentext.pushLocalGroupsOnly", "true");
     adaptor.init(context);
-    groupDefinitions = adaptor.getGroups(soapFactory.newMemberService());
+    groups = adaptor.new Groups(soapFactory.newMemberService());
+    groups.addGroups();
+    groupDefinitions = groups.getGroupDefinitions();
     assertEquals(1, groupDefinitions.size());
     assertNull("unexpected globalgroup",
         groupDefinitions.get(globalGroupPrincipal));
@@ -4002,6 +4149,21 @@ public class OpentextAdaptorTest {
       }
       members.add(member);
       this.groupMembers.put(group, members);
+    }
+
+    public void deleteMember(long id) {
+      for (Member member : this.members) {
+        if (member.getID() == id) {
+          this.members.remove(member);
+          for (List<Member> group : this.groupMembers.values()) {
+            group.remove(member);
+          }
+          if (member.getType().equals("Group")) {
+            this.groupMembers.remove(member.getID());
+          }
+          break;
+        }
+      }
     }
 
     public Member getMemberById(long id) {
