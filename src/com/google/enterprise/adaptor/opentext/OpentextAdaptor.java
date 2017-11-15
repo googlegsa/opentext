@@ -674,7 +674,7 @@ public class OpentextAdaptor extends AbstractAdaptor
       Map<GroupPrincipal, List<Principal>> groupDefinitions =
           groups.getGroupDefinitions();
       if (groupDefinitions.size() > 0) {
-        DocIdPusher.FeedType feedType = DocIdPusher.FeedType.FULL;
+        DocIdPusher.FeedType feedType = DocIdPusher.FeedType.REPLACE;
         if (groups.isPartialResults() || groupsException != null) {
           feedType = DocIdPusher.FeedType.INCREMENTAL;
           log.log(Level.FINE, "Sending partial groups results");
