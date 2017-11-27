@@ -34,6 +34,12 @@
   <property name="compile.java.newerClassname"
     value="java.lang.FunctionalInterface"/>
 
+  <!-- Use add-modules with Java 9 and higher. -->
+  <condition property="java.modules"
+      value="" else="--add-modules java.xml.ws">
+    <matches string="${ant.java.version}" pattern="^1\.[678]$"/>
+  </condition>
+
   <path id="adaptor.build.classpath">
     <pathelement location="${adaptor.jar}"/>
     <pathelement location="${build-generate.dir}"/>
@@ -341,6 +347,7 @@ lib/plexi submodule or add the the command line argument
     <javadoc sourcepath="${src.dir}" destdir="${javadoc.dir}"
         overview="${src.dir}/overview.html">
       <classpath refid="adaptor.build.classpath"/>
+      <arg line="${java.modules}"/>
       <arg value="-quiet"/>
       <arg value="-notimestamp"/>
     </javadoc>
@@ -348,6 +355,7 @@ lib/plexi submodule or add the the command line argument
 
   <target name="run" depends="build" description="Run adaptor">
     <java classpath="${build-src.dir}" fork="true" classname="${adaptor.class}">
+      <jvmarg line="${java.modules}"/>
       <classpath refid="adaptor.run.classpath"/>
       <sysproperty key="java.util.logging.config.file"
         value="logging.properties"/>
@@ -367,6 +375,7 @@ lib/plexi submodule or add the the command line argument
   <target name="test" depends="build" description="Run JUnit tests">
     <junit printsummary="yes" haltonfailure="yes" forkmode="once" fork="true"
       dir="${basedir}" maxmemory="512m">
+      <jvmarg line="${java.modules}"/>
       <sysproperty key="net.sourceforge.cobertura.datafile"
         file="${build-instrument.dir}/cobertura.ser"/>
       <classpath refid="adaptor.run.classpath"/>

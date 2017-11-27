@@ -1297,10 +1297,10 @@ public class OpentextAdaptorTest {
     IntegerValue integerValue = new IntegerValue();
     integerValue.setDescription("user attribute name");
     integerValue.setKey("5432.1.1");
-    integerValue.getValues().add(new Long(14985));
+    integerValue.getValues().add(14985L);
     // Include an id with no corresponding Member; API puts
     // null in the member list when a member can't be found.
-    integerValue.getValues().add(new Long(14986));
+    integerValue.getValues().add(14986L);
 
     // Create the corresponding member.
     Member member = getMember(14985, "testuser1", "User");
@@ -1713,10 +1713,10 @@ public class OpentextAdaptorTest {
     node.setComment("Node comment");
     node.setCreateDate(2012, 3, 1, 4, 34, 21);
     node.setModifyDate(2013, 3, 1, 4, 34, 21);
-    node.setCreatedBy(new Long(14985));
+    node.setCreatedBy(14985L);
     node.setType("NodeType");
     node.setDisplayType("Node Display Type");
-    node.setVolumeID(new Long(-321));
+    node.setVolumeID(Long.valueOf(-321));
     NodeVersionInfo versionInfo = new NodeVersionInfo();
     versionInfo.setMimeType("test/mime-type");
     versionInfo.setFileDataSize(1024L);
@@ -1954,7 +1954,7 @@ public class OpentextAdaptorTest {
   @Test
   public void testDoNews() throws IOException {
     NewsInfo newsInfo = new NewsInfo();
-    newsInfo.setCreatedBy(new Long(1001));
+    newsInfo.setCreatedBy(1001L);
     newsInfo.setEffectiveDate(
         getXmlGregorianCalendar(2013, 01, 01, 01, 01, 01));
     newsInfo.setExpirationDate(
@@ -2042,7 +2042,7 @@ public class OpentextAdaptorTest {
   @Test
   public void testDoProject() throws IOException {
     ProjectInfo projectInfo = new ProjectInfo();
-    projectInfo.setCreatedBy(new Long(1001));
+    projectInfo.setCreatedBy(1001L);
     projectInfo.setGoals("These are the goals.");
     projectInfo.setID(3000);
     projectInfo.setInitiatives("These are the initiatives.");
@@ -2236,7 +2236,7 @@ public class OpentextAdaptorTest {
   @Test
   public void testDoTask() throws IOException {
     TaskInfo taskInfo = new TaskInfo();
-    taskInfo.setAssignedTo(new Long(1001));
+    taskInfo.setAssignedTo(1001L);
     taskInfo.setComments("These are the comments.");
     taskInfo.setCompletionDate(
         getXmlGregorianCalendar(2013, 01, 01, 01, 01, 01));
