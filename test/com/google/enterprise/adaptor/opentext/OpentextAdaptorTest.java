@@ -24,9 +24,9 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import com.google.common.base.Joiner;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMultimap;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
@@ -115,7 +115,6 @@ import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -1856,16 +1855,6 @@ public class OpentextAdaptorTest {
     assertEquals(expected, baos.toString(UTF_8.name()));
   }
 
-  /** Returns the keySet of the anchors in the response. */
-  // TODO(bmj): This can go away if we upgrade to guava 19
-  private Set<String> getAnchorKeySet(RecordingResponse response) {
-    ImmutableSet.Builder<String> builder = ImmutableSet.builder();
-    for (Map.Entry<String, URI> entry : response.getAnchors()) {
-      builder.add(entry.getKey());
-    }
-    return builder.build();
-  }
-
   @Test
   public void testDoMilestone() throws IOException {
     MilestoneInfo milestoneInfo = new MilestoneInfo();
@@ -1947,8 +1936,8 @@ public class OpentextAdaptorTest {
             .put("TargetDate", "2013-02-01")
             .build()),
         response.getMetadata());
-    assertEquals(ImmutableSet.of("Document 1", "Document 2", "Document 3"),
-        getAnchorKeySet(response));
+    assertEquals(ImmutableList.of("Document 1", "Document 2", "Document 3"),
+        response.getAnchors().keyList());
   }
 
   @Test
@@ -1996,8 +1985,8 @@ public class OpentextAdaptorTest {
                 "EffectiveDate", "2013-02-01",
                 "ExpirationDate", "2013-02-11")),
         response.getMetadata());
-    assertEquals(ImmutableSet.of("Document 1", "Document 2", "Document 3"),
-        getAnchorKeySet(response));
+    assertEquals(ImmutableList.of("Document 1", "Document 2", "Document 3"),
+        response.getAnchors().keyList());
   }
 
   @Test
@@ -2093,8 +2082,8 @@ public class OpentextAdaptorTest {
             .put("Status", "PENDING")
             .build()),
         response.getMetadata());
-    assertEquals(ImmutableSet.of("Document 1", "Document 2", "Document 3"),
-        getAnchorKeySet(response));
+    assertEquals(ImmutableList.of("Document 1", "Document 2", "Document 3"),
+        response.getAnchors().keyList());
   }
 
   @Test
@@ -2186,8 +2175,8 @@ public class OpentextAdaptorTest {
                 "PostedDate", "2013-02-01",
                 "PostedBy", "testuser1")),
         response.getMetadata());
-    assertEquals(ImmutableSet.of("Document 1", "Document 2", "Document 3"),
-        getAnchorKeySet(response));
+    assertEquals(ImmutableList.of("Document 1", "Document 2", "Document 3"),
+        response.getAnchors().keyList());
   }
 
   @Test
@@ -2294,8 +2283,8 @@ public class OpentextAdaptorTest {
             .put("Status", "PENDING")
             .build()),
         response.getMetadata());
-    assertEquals(ImmutableSet.of("Document 1", "Document 2", "Document 3"),
-        getAnchorKeySet(response));
+    assertEquals(ImmutableList.of("Document 1", "Document 2", "Document 3"),
+        response.getAnchors().keyList());
   }
 
   @Test
