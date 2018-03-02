@@ -64,11 +64,18 @@ public class OpentextDocIdTest {
   }
 
   @Test
+  public void testInvalidIdNonNumeric() {
+    DocId adaptorDocId = new DocId("InvalidId:foo");
+    thrown.expect(IllegalArgumentException.class);
+    thrown.expectMessage("InvalidId:foo");
+    OpentextDocId docId = new OpentextDocId(adaptorDocId);
+  }
+
+  @Test
   public void testInvalidIdExtraComponents() {
+    DocId adaptorDocId = new DocId("InvalidId:234:543");
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("InvalidId:234:543");
-
-    DocId adaptorDocId = new DocId("InvalidId:234:543");
     OpentextDocId docId = new OpentextDocId(adaptorDocId);
   }
 

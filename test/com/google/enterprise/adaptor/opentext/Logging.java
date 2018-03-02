@@ -14,9 +14,14 @@
 
 package com.google.enterprise.adaptor.opentext;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.util.Collection;
 import java.util.logging.Handler;
 import java.util.logging.Level;
+import java.util.logging.LogManager;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 
@@ -47,7 +52,18 @@ public class Logging {
       });
   }
 
-  private Logging() {
-    throw new AssertionError();
+  /**
+   * Instantiated by java.util.logging.config.class.
+   */
+  public Logging() {
+    try {
+      LogManager.getLogManager().readConfiguration(
+          new ByteArrayInputStream(
+              "java.util.logging.ConsoleHandler.level=OFF".getBytes(UTF_8)));
+    } catch (IOException e) {
+      // Do nothing.
+    } catch (SecurityException e) {
+      // Do nothing.
+    }
   }
 }

@@ -14,6 +14,7 @@
 
 package com.google.enterprise.adaptor.opentext;
 
+import static com.google.enterprise.adaptor.opentext.Logging.captureLogMessages;
 import static com.google.enterprise.adaptor.opentext.OpentextAdaptor.SoapFactory;
 import static com.google.enterprise.adaptor.opentext.OpentextAdaptor.SoapFactoryImpl;
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -92,7 +93,6 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 
-import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -115,8 +115,6 @@ import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 import javax.activation.DataHandler;
 import javax.activation.DataSource;
@@ -149,13 +147,6 @@ public class OpentextAdaptorTest {
       + "    <NumberResultsThisPage>0</NumberResultsThisPage>"
       + "  </SearchResultsInformation>"
       + "</Output>";
-
-  @BeforeClass
-  public static void setUpClass() {
-    // Tests trigger warning logs in the adaptor; remove those
-    // stack traces from test output.
-    Logger.getLogger(OpentextAdaptor.class.getName()).setLevel(Level.SEVERE);
-  }
 
   @Rule
   public ExpectedException thrown = ExpectedException.none();
@@ -291,6 +282,124 @@ public class OpentextAdaptorTest {
     adaptor.init(context);
   }
 
+  /**
+   * If the first server authentication fails with a non-SOAP
+   * exception, and that server type was explicitly configured, that
+   * exception is rethrown.
+   */
+  @Test
+  public void testAuthenticateUserNonSoapExceptionNoServerFallback() {
+    class OpentextAdaptorError extends OpentextAdaptor {
+      OpentextAdaptorError(SoapFactory factory) {
+        super(factory);
+      }
+
+      @Override
+      String getAuthenticationToken(String username, String password) {
+        throw new RuntimeException("failed to get auth token");
+      }
+    }
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptorError(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.webServicesServer", "IIS");
+    thrown.expect(RuntimeException.class);
+    thrown.expectMessage("failed to get auth token");
+    adaptor.init(context);
+  }
+
+  /**
+   * If no server type (IIS, Tomcat) was explicitly configured, and
+   * the first server authentication (IIS) fails with a non-SOAP
+   * exception, try the other server type.
+   */
+  @Test
+  public void testAuthenticateUserNonSoapExceptionWithServerFallback() {
+    class OpentextAdaptorError extends OpentextAdaptor {
+      boolean thrown = false;
+
+      OpentextAdaptorError(SoapFactory factory) {
+        super(factory);
+      }
+
+      @Override
+      String getAuthenticationToken(String username, String password) {
+        if (!thrown) {
+          thrown = true;
+          throw new RuntimeException("failed to get auth token");
+        }
+        return super.getAuthenticationToken(username, password);
+      }
+    }
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptorError(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+  }
+
+  @Test
+  public void testAuthenticateUserSecondServerFails() {
+    class OpentextAdaptorError extends OpentextAdaptor {
+      boolean thrown = false;
+
+      OpentextAdaptorError(SoapFactory factory) {
+        super(factory);
+      }
+
+      @Override
+      String getAuthenticationToken(String username, String password) {
+        if (!thrown) {
+          thrown = true;
+          throw new RuntimeException("first server unavailable");
+        }
+        throw getSoapFaultException("javax.xml.ws.soap.SOAPFaultException",
+            "urn:Core.service.livelink.opentext.com",
+            "Core.LoginFailed", "ns0");
+      }
+    }
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptorError(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.username", "faileduser");
+    thrown.expect(InvalidConfigurationException.class);
+    thrown.expectMessage("Core.LoginFailed (opentext.username: faileduser):"
+        + " javax.xml.ws.soap.SOAPFaultException");
+    adaptor.init(context);
+  }
+
+  @Test
+  public void testAuthenticateUserSecondServerFailsNotAuthFailure() {
+    class OpentextAdaptorError extends OpentextAdaptor {
+      boolean thrown = false;
+
+      OpentextAdaptorError(SoapFactory factory) {
+        super(factory);
+      }
+
+      @Override
+      String getAuthenticationToken(String username, String password) {
+        if (!thrown) {
+          thrown = true;
+          throw new RuntimeException("first server unavailable");
+        }
+        throw getSoapFaultException("other error",
+            "uri", "local", "prefix");
+      }
+    }
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptorError(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.username", "invaliduser");
+    config.overrideKey("opentext.password", "validpassword");
+    thrown.expect(SOAPFaultException.class);
+    thrown.expectMessage("other error");
+    adaptor.init(context);
+  }
+
   @Test
   public void testAuthenticateAdminUserInvalidUser() {
     thrown.expect(InvalidConfigurationException.class);
@@ -304,6 +413,33 @@ public class OpentextAdaptorTest {
     Config config = initConfig(adaptor, context);
     config.overrideKey("opentext.adminUsername", "invaliduser");
     config.overrideKey("opentext.adminPassword", "validpassword");
+    adaptor.init(context);
+  }
+
+  @Test
+  public void testAuthenticateAdminUserNonAuthenticationFailure() {
+    class OpentextAdaptorError extends OpentextAdaptor {
+      OpentextAdaptorError(SoapFactory factory) {
+        super(factory);
+      }
+
+      @Override
+      String getAuthenticationToken(String username, String password) {
+        if (username.equals("adminuser")) {
+          throw getSoapFaultException("other error",
+              "uri", "local", "prefix");
+        }
+        return "authtoken";
+      }
+    }
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptorError(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.adminUsername", "adminuser");
+    config.overrideKey("opentext.adminPassword", "validpassword");
+    thrown.expect(SOAPFaultException.class);
+    thrown.expectMessage("other error");
     adaptor.init(context);
   }
 
@@ -387,6 +523,61 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     config.overrideKey("opentext.src", "");
+    adaptor.init(context);
+  }
+
+  @Test
+  public void testInitInvalidDocContentTimeoutSecs() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("adaptor.docContentTimeoutSecs", "foo");
+    thrown.expect(InvalidConfigurationException.class);
+    adaptor.init(context);
+  }
+
+  @Test
+  public void testInitInvalidDocHeaderTimeoutSecs() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("adaptor.docHeaderTimeoutSecs", "foo");
+    thrown.expect(InvalidConfigurationException.class);
+    adaptor.init(context);
+  }
+
+  @Test
+  public void testInitInvalidIndexingDownloadMethod() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.indexing.downloadMethod", "foo");
+    thrown.expect(InvalidConfigurationException.class);
+    adaptor.init(context);
+  }
+
+  @Test
+  public void testInitIndexingDownloadMethodMissingContentHandler() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.indexing.downloadMethod", "CONTENTHANDLER");
+    thrown.expect(InvalidConfigurationException.class);
+    adaptor.init(context);
+  }
+
+  @Test
+  public void testInitInvalidCurrentVersionType() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("opentext.currentVersionType", "foo");
+    thrown.expect(InvalidConfigurationException.class);
     adaptor.init(context);
   }
 
@@ -562,6 +753,7 @@ public class OpentextAdaptorTest {
     AdaptorContext context = ProxyAdaptorContext.getInstance();
     Config config = initConfig(adaptor, context);
     config.overrideKey("adaptor.markAllDocsAsPublic", "false");
+    config.overrideKey("opentext.publicAccessGroupEnabled", "true");
     adaptor.init(context);
 
     soapFactory.memberServiceMock.addMember(
@@ -577,6 +769,8 @@ public class OpentextAdaptorTest {
         new HashMap<GroupPrincipal, List<Principal>>();
     expected.put(newGroupPrincipal("group1"),
         Lists.<Principal>newArrayList(newUserPrincipal("user1")));
+    expected.put(newGroupPrincipal("[Public Access]"),
+        Lists.<Principal>newArrayList());
     assertEquals(expected, pusher.getGroupDefinitions());
   }
 
@@ -597,8 +791,9 @@ public class OpentextAdaptorTest {
     assertEquals(2000, node.getID());
     assertEquals("Enterprise Workspace", node.getName());
 
+    // Valid node id, invalid start point.
     assertNull(adaptor.getNode(documentManagement,
-            new OpentextDocId(new DocId("InvalidStartPoint:1111"))));
+            new OpentextDocId(new DocId("InvalidStartPoint:2000"))));
   }
 
   @Test
@@ -688,6 +883,101 @@ public class OpentextAdaptorTest {
     assertEquals(folderInProjectNode.getName(), node.getName());
   }
 
+  /**
+   * If a node can't be found in Content Server using the path in
+   * the doc id, the adaptor walks backward up the tree to check
+   * that the node is in the location the doc id says it is.
+   * Force a walk up the tree with a missing parent node to make
+   * the node not found.
+  */
+  @Test
+  public void testGetNodeMissingPathParent() {
+    class DocumentManagementError extends DocumentManagementMock {
+      // Returning null forces the path walk.
+      @Override
+      public Node getNodeByPath(long containerNodeId, List<String> path) {
+        return null;
+      }
+    }
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.documentManagementMock = new DocumentManagementError();
+    NodeMock projectNode = new NodeMock(3214, "Important Project");
+    projectNode.setStartPointId(2000);
+    projectNode.setParentID(2000);
+    projectNode.setPath("Important Project");
+    soapFactory.documentManagementMock.addNode(projectNode);
+
+    NodeMock folderInProjectNode = new NodeMock(4100, "Folder in Project");
+    folderInProjectNode.setStartPointId(2000);
+    folderInProjectNode.setParentID(-1 * projectNode.getID());
+    folderInProjectNode.setPath("Important Project", "Folder in Project");
+    soapFactory.documentManagementMock.addNode(folderInProjectNode);
+
+    NodeMock documentNode = new NodeMock(5100, "Document under Project");
+    documentNode.setStartPointId(2000);
+    documentNode.setParentID(folderInProjectNode.getID());
+    documentNode.setPath(
+        "Important Project", "Folder in Project", "Document under Project");
+    soapFactory.documentManagementMock.addNode(documentNode);
+
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    folderInProjectNode.setParentID(11111); // Invalid parent id
+    DocId docId = new DocId("EnterpriseWS/Important+Project/Folder+in+Project/"
+        + "Document+under+Project:" + documentNode.getID());
+    Node node = adaptor.getNode(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(docId));
+    assertNull("Unexpectedly found test node", node);
+  }
+
+  /**
+   * If a node has a different name than the name in the DocId,
+   * the paths won't match and the node will not be found.
+   */
+  @Test
+  public void testGetNodeBadPath() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    DocumentManagement documentManagement =
+        soapFactory.newDocumentManagement("token");
+    NodeMock testNode = new NodeMock(3214, "Important Document");
+    testNode.setStartPointId(2000);
+    testNode.setPath("folder 1", "folder 2", "Important Document");
+    soapFactory.documentManagementMock.addNode(testNode);
+    DocId docId =
+        new DocId("EnterpriseWS/folder+1/new name/Important+Document:3214");
+    Node node = adaptor.getNode(documentManagement, new OpentextDocId(docId));
+    assertNull("Unexpectedly found test node", node);
+  }
+
+  @Test
+  public void testGetNodeException() {
+    class DocumentManagementMockError extends DocumentManagementMock {
+      @Override
+      public Node getNodeByPath(long containerNodeId, List<String> path) {
+        throw getSoapFaultException("error", "uri", "local", "prefix");
+      }
+    }
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.documentManagementMock = new DocumentManagementMockError();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    NodeMock testNode = new NodeMock(3214, "Important Document");
+    testNode.setStartPointId(2000);
+    soapFactory.documentManagementMock.addNode(testNode);
+    DocId docId = new DocId("EnterpriseWS/Important+Document:3214");
+    Node node = adaptor.getNode(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(docId));
+    assertNull("Unexpectedly found test node", node);
+  }
+
   @Test
   public void testGetChildDocId() {
     SoapFactoryMock soapFactory = new SoapFactoryMock();
@@ -715,6 +1005,7 @@ public class OpentextAdaptorTest {
     NodeMock node = new NodeMock(3143, "Folder Name", "Folder");
     node.setStartPointId(2000);
     node.setPath(node.getName());
+    node.setIsContainer(true);
     soapFactory.documentManagementMock.addNode(node);
     soapFactory.documentManagementMock
         .setNodeRights(node.getID(), nodeRights);
@@ -756,6 +1047,7 @@ public class OpentextAdaptorTest {
     NodeMock node = new NodeMock(3143, "Folder Name", "Folder");
     node.setStartPointId(2000);
     node.setPath(node.getName());
+    node.setIsContainer(true);
     soapFactory.documentManagementMock.addNode(node);
     soapFactory.documentManagementMock
         .setNodeRights(node.getID(), nodeRights);
@@ -793,6 +1085,7 @@ public class OpentextAdaptorTest {
     NodeMock node = new NodeMock(3143, "Folder Name", "Folder");
     node.setStartPointId(2000);
     node.setPath(node.getName());
+    node.setIsContainer(true);
     soapFactory.documentManagementMock.addNode(node);
     soapFactory.documentManagementMock
         .setNodeRights(node.getID(), nodeRights);
@@ -819,6 +1112,7 @@ public class OpentextAdaptorTest {
     NodeMock node = new NodeMock(3143, "Folder Name", "Folder");
     node.setStartPointId(2000);
     node.setPath(node.getName());
+    node.setIsContainer(true);
     soapFactory.documentManagementMock.addNode(node);
     soapFactory.documentManagementMock
         .setNodeRights(node.getID(), nodeRights);
@@ -837,6 +1131,56 @@ public class OpentextAdaptorTest {
         .setPermitUsers(Sets.newHashSet(newUserPrincipal("testuser1")))
         .build();
     assertEquals(expected, response.getAcl());
+  }
+
+  @Test
+  public void testGetDocContentInvalidDocId() throws IOException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+
+    RecordingResponse response = new RecordingResponse();
+    Request request = new RequestMock("resources/file.txt");
+    adaptor.getDocContent(request, response);
+    assertEquals(RecordingResponse.State.NOT_FOUND, response.getState());
+  }
+
+  @Test
+  public void testGetDocContentMissingNode() throws IOException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+
+    RecordingResponse response = new RecordingResponse();
+    Request request = new RequestMock("2001/notfound:3001");
+    adaptor.getDocContent(request, response);
+    assertEquals(RecordingResponse.State.NOT_FOUND, response.getState());
+  }
+
+  @Test
+  public void testGetDocContentErrorGettingNode() throws IOException {
+    class DocumentManagementMockError extends DocumentManagementMock {
+      @Override
+      public Node getNode(long nodeId) {
+        throw getSoapFaultException("message", "uri",
+            "DocMan.Error", "prefix");
+      }
+    }
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.documentManagementMock = new DocumentManagementMockError();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+
+    RecordingResponse response = new RecordingResponse();
+    Request request = new RequestMock("2001/notfound:3001");
+    adaptor.getDocContent(request, response);
+    assertEquals(RecordingResponse.State.NOT_FOUND, response.getState());
   }
 
   @Test
@@ -878,6 +1222,63 @@ public class OpentextAdaptorTest {
         + "<li><a href=\"2000/Folder/Document+3:4003\">Document 3</a></li>"
         + "</body></html>";
     assertEquals(expected, baos.toString(UTF_8.name()));
+  }
+
+  @Test
+  public void testDoContainerPermissionsFailure() throws IOException {
+    class DocumentManagementMockError extends DocumentManagementMock {
+      @Override
+      public List<Node> listNodes(long containerNodeId, boolean partialData) {
+        throw getSoapFaultException("message", "uri",
+            "DocMan.PermissionsError", "prefix");
+      }
+    }
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.documentManagementMock = new DocumentManagementMockError();
+    NodeMock containerNode = new NodeMock(3000, "Folder");
+    containerNode.setStartPointId(2000);
+    containerNode.setPath("Folder");
+    soapFactory.documentManagementMock.addNode(containerNode);
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    RecordingResponse response = new RecordingResponse(baos);
+    adaptor.doContainer(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/Folder:3000")),
+        containerNode, response);
+    assertEquals(RecordingResponse.State.NOT_FOUND, response.getState());
+  }
+
+  @Test
+  public void testDoContainerOtherFailure() throws IOException {
+    class DocumentManagementMockError extends DocumentManagementMock {
+      @Override
+      public List<Node> listNodes(long containerNodeId, boolean partialData) {
+        throw getSoapFaultException("message", "uri",
+            "localPart", "prefix");
+      }
+    }
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.documentManagementMock = new DocumentManagementMockError();
+    NodeMock containerNode = new NodeMock(3000, "Folder");
+    containerNode.setStartPointId(2000);
+    containerNode.setPath("Folder");
+    soapFactory.documentManagementMock.addNode(containerNode);
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    RecordingResponse response = new RecordingResponse(baos);
+    List<String> messages = new ArrayList<>();
+    captureLogMessages(OpentextAdaptor.class,
+        "Error", messages);
+    adaptor.doContainer(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/Folder:3000")),
+        containerNode, response);
+    assertEquals(messages.toString(), 1, messages.size());
   }
 
   @Test
@@ -982,6 +1383,62 @@ public class OpentextAdaptorTest {
         soapFactory.newDocumentManagement("token");
     adaptor.doDocument(documentManagement, testDocId,
         documentNode, request, response);
+  }
+
+  @Test
+  public void testDoDocumentVersionExceptionPermissions() throws IOException {
+    class DocumentManagementMockError extends DocumentManagementMock {
+      @Override
+      public Version getVersion(long nodeId, long versionNumber) {
+        throw getSoapFaultException("message", "uri",
+            "DocMan.PermissionsError", "prefix");
+      }
+    }
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.documentManagementMock = new DocumentManagementMockError();
+    NodeMock documentNode = new NodeMock(3143, "name", "Document");
+    documentNode.setVersion(1, "text/plain",
+        new GregorianCalendar(2015, 1, 3, 9, 42, 42));
+    soapFactory.documentManagementMock.addNode(documentNode);
+    DocId docId = new DocId("2000/name:3143");
+    OpentextDocId testDocId = new OpentextDocId(docId);
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    Request request = new RequestMock(docId);
+    RecordingResponse response = new RecordingResponse();
+    adaptor.doDocument(soapFactory.newDocumentManagement("token"), testDocId,
+        documentNode, request, response);
+    assertEquals(RecordingResponse.State.NOT_FOUND, response.getState());
+  }
+
+  @Test
+  public void testDoDocumentVersionExceptionOther() throws IOException {
+    class DocumentManagementMockError extends DocumentManagementMock {
+      @Override
+      public Version getVersion(long nodeId, long versionNumber) {
+        throw getSoapFaultException("message", "uri",
+            "DocMan.OtherError", "prefix");
+      }
+    }
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.documentManagementMock = new DocumentManagementMockError();
+    NodeMock documentNode = new NodeMock(3143, "name", "Document");
+    documentNode.setVersion(1, "text/plain",
+        new GregorianCalendar(2015, 1, 3, 9, 42, 42));
+    soapFactory.documentManagementMock.addNode(documentNode);
+    DocId docId = new DocId("2000/name:3143");
+    OpentextDocId testDocId = new OpentextDocId(docId);
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    Request request = new RequestMock(docId);
+    RecordingResponse response = new RecordingResponse();
+    adaptor.doDocument(soapFactory.newDocumentManagement("token"), testDocId,
+        documentNode, request, response);
+    assertEquals(RecordingResponse.State.SETUP, response.getState());
   }
 
   @Test
@@ -1938,6 +2395,33 @@ public class OpentextAdaptorTest {
         response.getMetadata());
     assertEquals(ImmutableList.of("Document 1", "Document 2", "Document 3"),
         response.getAnchors().keyList());
+  }
+
+  @Test
+  public void testDoMilestoneError() throws IOException {
+    class CollaborationMockError extends CollaborationMock {
+      public MilestoneInfo getMilestone(long id) {
+        throw getSoapFaultException("error retrieving collaboration info",
+            "uri", "local", "prefix");
+      }
+    };
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.collaborationMock = new CollaborationMockError();
+    NodeMock node = new NodeMock(3000, "TestMilestone", "Milestone");
+    node.setStartPointId(2000);
+    node.setPath("MilestoneName");
+    soapFactory.documentManagementMock.addNode(node);
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    RecordingResponse response = new RecordingResponse(baos);
+    adaptor.doMilestone(soapFactory.newDocumentManagement("token"),
+        new OpentextDocId(new DocId("2000/TestMilestone:3000")),
+        node, response);
+    // Milestone-specific metadata should not be present
+    assertEquals(null, response.getMetadata().getOneValue("NumActive"));
   }
 
   @Test
@@ -3051,6 +3535,133 @@ public class OpentextAdaptorTest {
         pusher.getGroupDefinitions();
     assertEquals(50, groupDefinitions.size());
     assertEquals(DocIdPusher.FeedType.INCREMENTAL, pusher.latestFeedType);
+  }
+
+  @Test
+  public void testGroupsNullSearchResults() throws InterruptedException {
+    class MemberServiceMockError extends MemberServiceMock {
+      @Override
+      public MemberSearchResults getSearchResults(PageHandle pageHandle) {
+        return null;
+      }
+    }
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.memberServiceMock = new MemberServiceMockError();
+    soapFactory.memberServiceMock.addMember(
+        getMember(2000, "group 1", "Group"));
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    OpentextAdaptor.Groups groups =
+        adaptor.new Groups(soapFactory.newMemberService());
+    groups.addGroups();
+    assertEquals(ImmutableMap.of(), groups.getGroupDefinitions());
+    assertEquals(true, groups.isPartialResults());
+  }
+
+  @Test
+  public void testGroupsNullMembers() throws InterruptedException {
+    class MemberServiceMockError extends MemberServiceMock {
+      @Override
+      public MemberSearchResults getSearchResults(PageHandle pageHandle) {
+        return new MemberSearchResultsMock((PageHandleMock) pageHandle) {
+          @Override
+          public List<Member> getMembers() {
+            return null;
+          }
+        };
+      }
+    }
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.memberServiceMock = new MemberServiceMockError();
+    soapFactory.memberServiceMock.addMember(
+        getMember(2000, "group 1", "Group"));
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    OpentextAdaptor.Groups groups =
+        adaptor.new Groups(soapFactory.newMemberService());
+    groups.addGroups();
+    assertEquals(ImmutableMap.of(), groups.getGroupDefinitions());
+    assertEquals(true, groups.isPartialResults());
+  }
+
+  @Test
+  public void testGroupsPublicAccessNullHandle()
+      throws InterruptedException {
+    class MemberServiceMockError extends MemberServiceMock {
+      @Override
+      public PageHandle searchForMembers(MemberSearchOptions options) {
+        return null;
+      }
+    }
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.memberServiceMock = new MemberServiceMockError();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    OpentextAdaptor.Groups groups =
+        adaptor.new Groups(soapFactory.newMemberService());
+    groups.addPublicAccessGroup("[Public Access]", LOCAL_NAMESPACE);
+    assertEquals(ImmutableMap.of(), groups.getGroupDefinitions());
+    assertEquals(true, groups.isPartialResults());
+  }
+
+  @Test
+  public void testGroupsPublicAccessNullSearchResults()
+      throws InterruptedException {
+    class MemberServiceMockError extends MemberServiceMock {
+      @Override
+      public MemberSearchResults getSearchResults(PageHandle pageHandle) {
+        return null;
+      }
+    }
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.memberServiceMock = new MemberServiceMockError();
+    soapFactory.memberServiceMock.addMember(getMember(2000, "user 1", "User"));
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    OpentextAdaptor.Groups groups =
+        adaptor.new Groups(soapFactory.newMemberService());
+    groups.addPublicAccessGroup("[Public Access]", LOCAL_NAMESPACE);
+    assertEquals(ImmutableMap.of(
+            newGroupPrincipal("[Public Access]"), ImmutableList.of()),
+        groups.getGroupDefinitions());
+    assertEquals(true, groups.isPartialResults());
+  }
+
+  @Test
+  public void testGroupsPublicAccessNullMembers() throws InterruptedException {
+    class MemberServiceMockError extends MemberServiceMock {
+      @Override
+      public MemberSearchResults getSearchResults(PageHandle pageHandle) {
+        return new MemberSearchResultsMock((PageHandleMock) pageHandle) {
+          @Override
+          public List<Member> getMembers() {
+            return null;
+          }
+        };
+      }
+    }
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    soapFactory.memberServiceMock = new MemberServiceMockError();
+    soapFactory.memberServiceMock.addMember(getMember(2000, "user 1", "User"));
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    adaptor.init(context);
+    OpentextAdaptor.Groups groups =
+        adaptor.new Groups(soapFactory.newMemberService());
+    groups.addPublicAccessGroup("[Public Access]", LOCAL_NAMESPACE);
+    assertEquals(ImmutableMap.of(
+            newGroupPrincipal("[Public Access]"), ImmutableList.of()),
+        groups.getGroupDefinitions());
+    assertEquals(true, groups.isPartialResults());
   }
 
   @Test

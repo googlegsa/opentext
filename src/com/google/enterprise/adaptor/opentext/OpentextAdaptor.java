@@ -2408,7 +2408,8 @@ public class OpentextAdaptor extends AbstractAdaptor
         xmlCalendar.toGregorianCalendar().getTime());
   }
 
-  private String getAuthenticationToken(String username, String password) {
+  @VisibleForTesting
+  String getAuthenticationToken(String username, String password) {
     com.opentext.ecm.services.authws.Authentication dsAuthentication =
         this.soapFactory.newDsAuthentication();
     if (dsAuthentication == null) {

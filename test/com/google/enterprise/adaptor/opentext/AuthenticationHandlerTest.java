@@ -14,15 +14,20 @@
 
 package com.google.enterprise.adaptor.opentext;
 
+import static com.google.enterprise.adaptor.opentext.Logging.captureLogMessages;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import com.google.common.collect.ImmutableSet;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
+import java.util.ArrayList;
 import java.util.Iterator;
-
+import java.util.List;
+import javax.xml.namespace.QName;
 import javax.xml.soap.MessageFactory;
 import javax.xml.soap.SOAPElement;
 import javax.xml.soap.SOAPException;
@@ -59,6 +64,61 @@ public class AuthenticationHandlerTest {
     assertEquals("authtoken", handler.getAuthenticationToken());
     assertTrue(handler.handleMessage(context));
     assertEquals("incoming token", handler.getAuthenticationToken());
+  }
+
+  @Test
+  public void testEmptyMessage() throws SOAPException {
+    SOAPMessageContextMock contextMock = new SOAPMessageContextMock(false);
+    contextMock.message = null;
+    SOAPMessageContext context =
+        Proxies.newProxyInstance(SOAPMessageContext.class, contextMock);
+    AuthenticationHandler handler = new AuthenticationHandler("authtoken");
+    List<String> messages = new ArrayList<>();
+    captureLogMessages(AuthenticationHandler.class,
+        "SOAPMessageContext.message==null", messages);
+    assertTrue(handler.handleMessage(context));
+    assertEquals(messages.toString(), 1, messages.size());
+  }
+
+  @Test
+  public void testEmptyHeaderInbound() throws SOAPException {
+    SOAPMessageContextMock contextMock = new SOAPMessageContextMock(false);
+    contextMock.message.getSOAPPart().getEnvelope().getHeader().detachNode();
+    assertNull("header should be missing",
+        contextMock.message.getSOAPHeader());
+    SOAPMessageContext context =
+        Proxies.newProxyInstance(SOAPMessageContext.class, contextMock);
+    AuthenticationHandler handler = new AuthenticationHandler(null);
+    assertTrue(handler.handleMessage(context));
+    assertNull("token should be missing", handler.getAuthenticationToken());
+  }
+
+  @Test
+  public void testEmptyHeaderOutbound() throws SOAPException {
+    SOAPMessageContextMock contextMock = new SOAPMessageContextMock(true);
+    contextMock.message.getSOAPPart().getEnvelope().getHeader().detachNode();
+    assertEquals("header should be missing",
+        null, contextMock.message.getSOAPHeader());
+    SOAPMessageContext context =
+        Proxies.newProxyInstance(SOAPMessageContext.class, contextMock);
+    AuthenticationHandler handler = new AuthenticationHandler("authtoken");
+    assertTrue(handler.handleMessage(context));
+    assertAuthenticationHeaderEquals("authtoken",
+        contextMock.message.getSOAPHeader());
+  }
+
+  // Test interface methods for coverage
+  @Test
+  public void testBasicMethods() throws SOAPException {
+    SOAPMessageContextMock contextMock = new SOAPMessageContextMock(false);
+    SOAPMessageContext context =
+        Proxies.newProxyInstance(SOAPMessageContext.class, contextMock);
+    AuthenticationHandler handler = new AuthenticationHandler("authtoken");
+    assertEquals(ImmutableSet.of(
+            new QName("urn:api.ecm.opentext.com", "OTAuthentication")),
+        handler.getHeaders());
+    assertTrue(handler.handleFault(context));
+    handler.close(context);
   }
 
   private static class SOAPMessageContextMock {
