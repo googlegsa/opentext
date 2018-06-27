@@ -52,6 +52,11 @@ opentext.publicAccessGroupEnabled = true|false
 # in the system. Default is empty “”.
 # opentext.windowsDomain =
 
+# Case-sensitivity for ACLs and group feeds. Possible values are
+# everything-case-sensitive and everything-case-insensitive
+# Default is everything-case-sensitive.
+# adaptor.caseSensitivityType = everything-case-sensitive
+
 # When opentext.pushLocalGroupsOnly value is set to true, only
 # local groups are pushed to GSA.
 # opentext.pushLocalGroupsOnly = false

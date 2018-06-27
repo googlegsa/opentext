@@ -169,6 +169,7 @@ public class OpentextAdaptor extends AbstractAdaptor
   private String windowsDomain;
   private String globalNamespace;
   private String localNamespace;
+  private CaseSensitivityType caseSensitivityType;
   private boolean pushLocalGroupsOnly;
   /** Configured start points, with unknown values removed. */
   private List<StartPoint> startPoints;
@@ -221,6 +222,20 @@ public class OpentextAdaptor extends AbstractAdaptor
     CONTENTHANDLER, CONTENTSERVER, WEBSERVICES
   }
 
+  private enum CaseSensitivityType {
+   EVERYTHING_CASE_SENSITIVE, EVERYTHING_CASE_INSENSITIVE;
+
+   @Override
+   public String toString() {
+     return name().replace('_', '-').toLowerCase(ENGLISH);
+   }
+
+   public static CaseSensitivityType fromString(String tag) {
+     return Enum.valueOf(CaseSensitivityType.class,
+         tag.replace('-', '_').toUpperCase(ENGLISH));
+   }
+ }
+
   public OpentextAdaptor() {
     this(new SoapFactoryImpl());
   }
@@ -242,6 +257,8 @@ public class OpentextAdaptor extends AbstractAdaptor
     config.addKey("opentext.publicAccessGroupEnabled", "false");
     config.addKey("opentext.windowsDomain", "");
     config.addKey("adaptor.namespace", Principal.DEFAULT_NAMESPACE);
+    config.addKey("adaptor.caseSensitivityType",
+        CaseSensitivityType.EVERYTHING_CASE_SENSITIVE.toString());
     config.addKey("opentext.pushLocalGroupsOnly", "false");
     config.addKey("opentext.src", "EnterpriseWS");
     config.addKey("opentext.src.separator", ",");
@@ -502,6 +519,20 @@ public class OpentextAdaptor extends AbstractAdaptor
       this.localNamespace =
           getLocalNamespace(this.globalNamespace, this.contentServerUrl);
       log.log(Level.CONFIG, "local namespace: {0}", this.localNamespace);
+
+      try {
+        this.caseSensitivityType = CaseSensitivityType.fromString(
+            config.getValue("adaptor.caseSensitivityType"));
+      } catch (IllegalArgumentException e) {
+        throw new InvalidConfigurationException(
+            "Invalid value '"
+            + config.getValue("adaptor.caseSensitivityType")
+            + "' for adaptor.caseSensitivityType; valid values are "
+            + Arrays.toString(CaseSensitivityType.values()));
+      }
+      log.log(Level.CONFIG, "adaptor.caseSensitivityType: {0}",
+          caseSensitivityType);
+
       String pushLocalGroupsOnly =
           config.getValue("opentext.pushLocalGroupsOnly");
       log.log(Level.CONFIG,
@@ -680,8 +711,9 @@ public class OpentextAdaptor extends AbstractAdaptor
           log.log(Level.FINE, "Sending partial groups results");
         }
         pusher.pushGroupDefinitions(groupDefinitions,
-            /* case sensitive */ true, feedType,
-            /* group source */ null, /* exception handler */ null);
+            caseSensitivityType
+                == CaseSensitivityType.EVERYTHING_CASE_SENSITIVE,
+            feedType, /* group source */ null, /* exception handler */ null);
       } else if (groupsException != null) {
         throw groupsException;
       }
@@ -1356,9 +1388,16 @@ public class OpentextAdaptor extends AbstractAdaptor
     // Even when permissions are inherited, Content Server keeps
     // a copy of all the permissions on each node, so each ACL
     // that we construct here should be complete for the node.
-    Acl acl = new Acl.Builder().setEverythingCaseSensitive()
+    Acl.Builder aclBuilder = new Acl.Builder()
         .setInheritanceType(Acl.InheritanceType.LEAF_NODE)
-        .setPermitUsers(permitUsers).setPermitGroups(permitGroups).build();
+        .setPermitUsers(permitUsers)
+        .setPermitGroups(permitGroups);
+    if (caseSensitivityType == CaseSensitivityType.EVERYTHING_CASE_SENSITIVE) {
+      aclBuilder.setEverythingCaseSensitive();
+    } else {
+      aclBuilder.setEverythingCaseInsensitive();
+    }
+    Acl acl = aclBuilder.build();
     response.setAcl(acl);
   }
 

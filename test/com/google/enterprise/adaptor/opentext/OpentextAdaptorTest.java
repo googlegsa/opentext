@@ -549,6 +549,17 @@ public class OpentextAdaptorTest {
   }
 
   @Test
+  public void testInitInvalidCaseSensitivityType() {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("adaptor.caseSensitivityType", "foo");
+    thrown.expect(InvalidConfigurationException.class);
+    adaptor.init(context);
+  }
+
+  @Test
   public void testInitInvalidIndexingDownloadMethod() {
     SoapFactoryMock soapFactory = new SoapFactoryMock();
     OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
@@ -763,7 +774,7 @@ public class OpentextAdaptorTest {
     soapFactory.memberServiceMock.addMemberToGroup(
         2000, soapFactory.memberServiceMock.getMemberById(1000));
 
-    RecordingDocIdPusher pusher = new RecordingDocIdPusher();
+    GroupRecordingDocIdPusher pusher = new GroupRecordingDocIdPusher();
     adaptor.getDocIds(pusher);
     Map<GroupPrincipal, List<Principal>> expected =
         new HashMap<GroupPrincipal, List<Principal>>();
@@ -772,6 +783,39 @@ public class OpentextAdaptorTest {
     expected.put(newGroupPrincipal("[Public Access]"),
         Lists.<Principal>newArrayList());
     assertEquals(expected, pusher.getGroupDefinitions());
+    assertTrue(pusher.latestCaseSensitive);
+  }
+
+  @Test
+  public void testGetDocIdsMarkPublicFalseCaseInsensitive()
+      throws InterruptedException {
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("adaptor.markAllDocsAsPublic", "false");
+    config.overrideKey("adaptor.caseSensitivityType",
+        "everything-case-insensitive");
+    config.overrideKey("opentext.publicAccessGroupEnabled", "true");
+    adaptor.init(context);
+
+    soapFactory.memberServiceMock.addMember(
+        getMember(1000, "user1", "User"));
+    soapFactory.memberServiceMock.addMember(
+        getMember(2000, "group1", "Group"));
+    soapFactory.memberServiceMock.addMemberToGroup(
+        2000, soapFactory.memberServiceMock.getMemberById(1000));
+
+    GroupRecordingDocIdPusher pusher = new GroupRecordingDocIdPusher();
+    adaptor.getDocIds(pusher);
+    Map<GroupPrincipal, List<Principal>> expected =
+        new HashMap<GroupPrincipal, List<Principal>>();
+    expected.put(newGroupPrincipal("group1"),
+        Lists.<Principal>newArrayList(newUserPrincipal("user1")));
+    expected.put(newGroupPrincipal("[Public Access]"),
+        Lists.<Principal>newArrayList());
+    assertEquals(expected, pusher.getGroupDefinitions());
+    assertFalse(pusher.latestCaseSensitive);
   }
 
   @Test
@@ -1129,6 +1173,40 @@ public class OpentextAdaptorTest {
     adaptor.getDocContent(request, response);
     Acl expected = new Acl.Builder()
         .setPermitUsers(Sets.newHashSet(newUserPrincipal("testuser1")))
+        .build();
+    assertEquals(expected, response.getAcl());
+  }
+
+  @Test
+  public void testGetDocContentMarkPublicFalseCaseInsensitive()
+      throws IOException {
+    Member owner = getMember(1001, "testuser1", "User");
+    NodeRights nodeRights = new NodeRights();
+    nodeRights.setOwnerRight(getNodeRight(owner.getID(), "Owner"));
+    SoapFactoryMock soapFactory = new SoapFactoryMock();
+    NodeMock node = new NodeMock(3143, "Folder Name", "Folder");
+    node.setStartPointId(2000);
+    node.setPath(node.getName());
+    node.setIsContainer(true);
+    soapFactory.documentManagementMock.addNode(node);
+    soapFactory.documentManagementMock
+        .setNodeRights(node.getID(), nodeRights);
+    soapFactory.memberServiceMock.addMember(owner);
+
+    OpentextAdaptor adaptor = new OpentextAdaptor(soapFactory);
+    AdaptorContext context = ProxyAdaptorContext.getInstance();
+    Config config = initConfig(adaptor, context);
+    config.overrideKey("adaptor.markAllDocsAsPublic", "false");
+    config.overrideKey("adaptor.caseSensitivityType",
+        "everything-case-insensitive");
+    adaptor.init(context);
+
+    RecordingResponse response = new RecordingResponse();
+    Request request = new RequestMock("EnterpriseWS/Folder+Name:3143");
+    adaptor.getDocContent(request, response);
+    Acl expected = new Acl.Builder()
+        .setPermitUsers(Sets.newHashSet(newUserPrincipal("testuser1")))
+        .setEverythingCaseInsensitive()
         .build();
     assertEquals(expected, response.getAcl());
   }
@@ -3515,21 +3593,7 @@ public class OpentextAdaptorTest {
     Config config = initConfig(adaptor, context);
     adaptor.init(context);
 
-    class MyRecordingDocIdPusher extends RecordingDocIdPusher {
-      DocIdPusher.FeedType latestFeedType;
-
-      @Override
-      public GroupPrincipal pushGroupDefinitions(
-          Map<GroupPrincipal, ? extends Collection<Principal>> defs,
-          boolean caseSensitive, FeedType feedType, String sourceName,
-          ExceptionHandler exceptionHandler) throws InterruptedException {
-        this.latestFeedType = feedType;
-        return super.pushGroupDefinitions(
-            defs, caseSensitive, feedType, sourceName, exceptionHandler);
-      }
-    };
-
-    MyRecordingDocIdPusher pusher = new MyRecordingDocIdPusher();
+    GroupRecordingDocIdPusher pusher = new GroupRecordingDocIdPusher();
     adaptor.getDocIds(pusher);
     Map<GroupPrincipal, Collection<Principal>> groupDefinitions =
         pusher.getGroupDefinitions();
@@ -4439,6 +4503,21 @@ public class OpentextAdaptorTest {
     return server;
   }
 
+  private static class GroupRecordingDocIdPusher extends RecordingDocIdPusher {
+    boolean latestCaseSensitive;
+    DocIdPusher.FeedType latestFeedType;
+
+    @Override
+    public GroupPrincipal pushGroupDefinitions(
+        Map<GroupPrincipal, ? extends Collection<Principal>> defs,
+        boolean caseSensitive, FeedType feedType, String sourceName,
+        ExceptionHandler exceptionHandler) throws InterruptedException {
+      this.latestCaseSensitive = caseSensitive;
+      this.latestFeedType = feedType;
+      return super.pushGroupDefinitions(
+          defs, caseSensitive, feedType, sourceName, exceptionHandler);
+    }
+  };
 
   private class SoapFactoryMock implements SoapFactory {
     private DsAuthenticationMock dsAuthenticationMock;
